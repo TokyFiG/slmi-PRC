@@ -6,7 +6,7 @@
         ];
 
         if (sessionStorage.getItem("slmi_user")) {
-            window.location.href = "pages/presence.html";
+            window.location.href = "./pages/presence.html";
         }
 
         function afficherAlerte(message) {
@@ -38,7 +38,7 @@
                 role: utilisateur.role
             }));
 
-            window.location.href = "pages/presence.html";
+            window.location.href = "./pages/presence.html";
         }
         function togglePassword() {
             const passwordInput = document.getElementById("password");
