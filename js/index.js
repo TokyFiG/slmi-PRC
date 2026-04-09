@@ -24,7 +24,7 @@ if (!userData) {
         const heureArrivee = document.getElementById('heureArrivee').value;
         const frais = document.getElementById('frais').value;
 
-        if (!nom || !date || !heureArrivee || frais === '') {
+        if (!nom || !date || !heureArrivee === '') {
             alert('Merci de remplir tous les champs.');
             return;
         }
