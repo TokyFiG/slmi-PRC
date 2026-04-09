@@ -6,7 +6,7 @@
         ];
 
         if (sessionStorage.getItem("slmi_user")) {
-            window.location.href = "../pages/presence.html";
+            window.location.href = "pages/presence.html";
         }
 
         function afficherAlerte(message) {
@@ -38,6 +38,19 @@
                 role: utilisateur.role
             }));
 
-            window.location.href = "../pages/presence.html";
+            window.location.href = "pages/presence.html";
         }
-   
+        function togglePassword() {
+            const passwordInput = document.getElementById("password");
+            const icon = document.getElementById("eyeIcon");
+        
+            if (passwordInput.type === "password") {
+                passwordInput.type = "text";
+                icon.classList.add("bi-eye");
+                icon.classList.remove("bi-eye-slash");
+            } else {
+                passwordInput.type = "password";
+                icon.classList.add("bi-eye-slash");
+                icon.classList.remove("bi-eye");
+            }
+        }
