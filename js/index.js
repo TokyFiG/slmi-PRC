@@ -255,8 +255,16 @@ if (!userData) {
             body: rows,
             startY: 42
         });
+        const today = new Date();
 
-        doc.save('rapport-presence.pdf');
+        // Format JJ-MM-AAAA
+        const day = String(today.getDate()).padStart(2, '0');
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const year = today.getFullYear();
+
+        const fileName = `rapport-presence-${day}-${month}-${year}.pdf`;
+
+        doc.save(fileName);
     }
 
     function viderDonnees() {
