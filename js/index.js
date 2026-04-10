@@ -157,14 +157,12 @@ if (!userData) {
                     <button class="btn btn-danger" onclick="supprimerPresence(${item.id})">Supprimer</button>
                     <button class="btn btn-primary" onclick="ajouterSortie(${item.id})" ${item.heureSortie ? 'disabled' : ''}>
                         ${item.heureSortie ? 'Déjà sortie' : 'Sortie'}
-                    </button>
-                    
+                    </button>    
                   </div>
                 </td>
               </tr>
             `;
         });
-
         html += '</tbody></table>';
         zone.innerHTML = html;
     }
