@@ -153,11 +153,12 @@ if (!userData) {
                 <td data-label="Frais">${formatMontant(item.frais)} Ar</td>
                 <td data-label="Actions">
                   <div class="actions">
+                  <button class="btn btn-secondary" onclick="modifierPresence(${item.id})">Modifier</button>
+                    <button class="btn btn-danger" onclick="supprimerPresence(${item.id})">Supprimer</button>
                     <button class="btn btn-primary" onclick="ajouterSortie(${item.id})" ${item.heureSortie ? 'disabled' : ''}>
                         ${item.heureSortie ? 'Déjà sortie' : 'Sortie'}
                     </button>
-                    <button class="btn btn-secondary" onclick="modifierPresence(${item.id})">Modifier</button>
-                    <button class="btn btn-danger" onclick="supprimerPresence(${item.id})">Supprimer</button>
+                    
                   </div>
                 </td>
               </tr>
