@@ -1,282 +1,620 @@
-
 const userData = JSON.parse(sessionStorage.getItem("slmi_user"));
 
 if (!userData) {
     window.location.href = "../index.html";
 } else {
     const zoneUser = document.getElementById("userConnecte");
-    if (zoneUser) {
-        zoneUser.textContent = userData.nom;
+    const zoneUserNom = document.getElementById("userConnecteNom");
+
+    if (zoneUser) zoneUser.textContent = userData.nom;
+    if (zoneUserNom) zoneUserNom.textContent = userData.nom;
+}
+
+const STORAGE_KEY = 'gestion_presences_data';
+const PERSONNEL_KEY = 'gestion_personnels_data';
+
+let presences = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+let personnels = JSON.parse(localStorage.getItem(PERSONNEL_KEY)) || [];
+
+document.getElementById('datePresence').value = getDateAujourdhui();
+mettreHeureActuelle();
+
+function afficherMessage(message, type = "success") {
+    const box = document.getElementById("messageBox");
+
+    box.innerHTML = `
+        <div class="alert alert-${type} alert-dismissible fade show shadow" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+
+    setTimeout(() => {
+        box.innerHTML = "";
+    }, 3000);
+}
+
+function getDateAujourdhui() {
+    const now = new Date();
+    return now.toISOString().split('T')[0];
+}
+
+function getHeureActuelle() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+}
+
+function mettreHeureActuelle() {
+    const champHeure = document.getElementById('heureArrivee');
+    if (champHeure) {
+        champHeure.value = getHeureActuelle();
     }
 }
-    const STORAGE_KEY = 'gestion_presences_data';
-    let presences = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
 
-    document.getElementById('datePresence').value = new Date().toISOString().split('T')[0];
+function genererMatricule() {
+    if (personnels.length === 0) return "EMP001";
 
-    function sauvegarder() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(presences));
+    const numeros = personnels
+        .map(p => {
+            const match = String(p.matricule || '').match(/\d+/);
+            return match ? parseInt(match[0], 10) : 0;
+        })
+        .filter(n => !isNaN(n));
+
+    const max = numeros.length ? Math.max(...numeros) : 0;
+    return `EMP${String(max + 1).padStart(3, '0')}`;
+}
+
+function sauvegarder() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(presences));
+}
+
+function sauvegarderPersonnels() {
+    localStorage.setItem(PERSONNEL_KEY, JSON.stringify(personnels));
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('fr-FR');
+}
+
+function formatMontant(valeur) {
+    return Number(valeur || 0).toLocaleString('fr-FR');
+}
+
+function calculerHeuresTravail(heureArrivee, heureSortie) {
+    if (!heureArrivee || !heureSortie) return '-';
+
+    const [h1, m1] = heureArrivee.split(':').map(Number);
+    const [h2, m2] = heureSortie.split(':').map(Number);
+
+    const debut = h1 * 60 + m1;
+    const fin = h2 * 60 + m2;
+
+    if (fin < debut) return '-';
+
+    const diff = fin - debut;
+    const heures = Math.floor(diff / 60);
+    const minutes = diff % 60;
+
+    return `${String(heures).padStart(2, '0')}h${String(minutes).padStart(2, '0')}`;
+}
+
+function ajouterPersonnel() {
+    const matricule = genererMatricule();
+    const nom = document.getElementById('nomPersonnel').value.trim();
+    const departement = document.getElementById('departementPersonnel').value;
+
+    if (!nom || !departement) {
+        alert('Merci de remplir tous les champs du personnel.');
+        return;
     }
 
-    function ajouterPresence() {
-        const nom = document.getElementById('nom').value.trim();
-        const date = document.getElementById('datePresence').value;
-        const heureArrivee = document.getElementById('heureArrivee').value;
-        const frais = document.getElementById('frais').value;
+    personnels.push({
+        id: Date.now(),
+        matricule,
+        nom,
+        departement
+    });
 
-        if (!nom || !date || !heureArrivee  === '') {
-            alert('Merci de remplir tous les champs.');
-            return;
+    sauvegarderPersonnels();
+    afficherPersonnels();
+    chargerListePersonnel();
+
+    document.getElementById('nomPersonnel').value = '';
+    document.getElementById('departementPersonnel').value = '';
+
+    afficherMessage("Personnel ajouté avec succès.");
+
+    const modalElement = document.getElementById('modalPersonnel');
+    const modalInstance = bootstrap.Modal.getInstance(modalElement);
+    if (modalInstance) modalInstance.hide();
+}
+
+function chargerListePersonnel() {
+    const select = document.getElementById('personnelSelect');
+    select.innerHTML = `<option value="">-- Sélectionner un personnel --</option>`;
+
+    personnels.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = `${item.nom} (${item.matricule})`;
+        select.appendChild(option);
+    });
+}
+
+function remplirInfosPersonnel() {
+    const id = Number(document.getElementById('personnelSelect').value);
+    const item = personnels.find(p => p.id === id);
+
+    document.getElementById('matriculeAffiche').value = item ? item.matricule : '';
+    document.getElementById('nom').value = item ? item.nom : '';
+    document.getElementById('departement').value = item ? item.departement : '';
+    document.getElementById('frais').value = '';
+}
+
+function ajouterPresence() {
+    const personnelId = Number(document.getElementById('personnelSelect').value);
+    const matricule = document.getElementById('matriculeAffiche').value.trim();
+    const nom = document.getElementById('nom').value.trim();
+    const departement = document.getElementById('departement').value.trim();
+    const localisation = document.getElementById('localisation').value;
+    const date = document.getElementById('datePresence').value;
+    const heureArrivee = getHeureActuelle();
+    const frais = document.getElementById('frais').value || 0;
+
+    if (!personnelId || !matricule || !nom || !departement || !localisation || !date) {
+        alert('Merci de sélectionner un personnel et une position.');
+        return;
+    }
+
+    const dejaPresent = presences.some(item => item.personnelId === personnelId && item.date === date);
+    if (dejaPresent) {
+        alert('Cette personne a déjà une présence enregistrée aujourd’hui.');
+        return;
+    }
+
+    presences.push({
+        id: Date.now(),
+        personnelId,
+        matricule,
+        nom,
+        departement,
+        localisation,
+        date,
+        heureArrivee,
+        heureSortie: '',
+        frais: Number(frais),
+        heuresTravail: '-'
+    });
+
+    sauvegarder();
+    afficherPresences();
+    mettreAJourStats();
+
+    document.getElementById('personnelSelect').value = '';
+    document.getElementById('matriculeAffiche').value = '';
+    document.getElementById('nom').value = '';
+    document.getElementById('departement').value = '';
+    document.getElementById('localisation').value = '';
+    document.getElementById('frais').value = '';
+    document.getElementById('datePresence').value = getDateAujourdhui();
+    mettreHeureActuelle();
+
+    afficherMessage("Présence ajoutée avec succès.");
+}
+
+function ajouterSortie(id) {
+    const item = presences.find(x => x.id === id);
+    if (!item || item.heureSortie) return;
+
+    const heureSortie = getHeureActuelle();
+    item.heureSortie = heureSortie;
+    item.heuresTravail = calculerHeuresTravail(item.heureArrivee, item.heureSortie);
+
+    sauvegarder();
+    afficherPresences();
+    mettreAJourStats();
+    afficherMessage("Sortie enregistrée avec succès.");
+}
+
+function modifierPresence(id) {
+    const item = presences.find(x => x.id === id);
+    if (!item) return;
+
+    const nouveauxFrais = prompt('Modifier les frais :', item.frais ?? 0);
+    if (nouveauxFrais === null) return;
+
+    if (nouveauxFrais === '' || isNaN(Number(nouveauxFrais))) {
+        alert('Modification invalide. Vérifiez le montant.');
+        return;
+    }
+
+    item.frais = Number(nouveauxFrais);
+    item.heuresTravail = calculerHeuresTravail(item.heureArrivee, item.heureSortie);
+
+    sauvegarder();
+    afficherPresences();
+    mettreAJourStats();
+    afficherMessage("Présence modifiée avec succès.");
+}
+
+function ouvrirModalModifierPersonnel(id) {
+    const item = personnels.find(p => p.id === id);
+    if (!item) return;
+
+    document.getElementById('editPersonnelId').value = item.id;
+    document.getElementById('editMatriculePersonnel').value = item.matricule || '';
+    document.getElementById('editNomPersonnel').value = item.nom || '';
+    document.getElementById('editDepartementPersonnel').value = item.departement || '';
+
+    const modal = new bootstrap.Modal(document.getElementById('modalModifierPersonnel'));
+    modal.show();
+}
+
+function validerModificationPersonnel() {
+    const id = Number(document.getElementById('editPersonnelId').value);
+    const item = personnels.find(p => p.id === id);
+    if (!item) return;
+
+    const nom = document.getElementById('editNomPersonnel').value.trim();
+    const departement = document.getElementById('editDepartementPersonnel').value;
+
+    if (!nom || !departement) {
+        alert('Merci de remplir tous les champs.');
+        return;
+    }
+
+    item.nom = nom;
+    item.departement = departement;
+
+    presences.forEach(presence => {
+        if (presence.personnelId === id) {
+            presence.nom = nom;
+            presence.departement = departement;
         }
+    });
 
-        presences.push({
-            id: Date.now(),
-            nom,
-            date,
-            heureArrivee,
-            heureSortie: '',
-            frais: Number(frais)
-        });
+    sauvegarderPersonnels();
+    sauvegarder();
+    afficherPersonnels();
+    chargerListePersonnel();
+    afficherPresences();
 
-        sauvegarder();
-        afficherPresences();
-        mettreAJourStats();
+    afficherMessage("Personnel modifié avec succès.");
 
-        document.getElementById('nom').value = '';
-        document.getElementById('heureArrivee').value = '';
-        document.getElementById('frais').value = '';
+    const modalElement = document.getElementById('modalModifierPersonnel');
+    const modalInstance = bootstrap.Modal.getInstance(modalElement);
+    if (modalInstance) modalInstance.hide();
+}
+
+function supprimerPersonnel(id) {
+    const utilise = presences.some(item => item.personnelId === id);
+    if (utilise) {
+        alert("Impossible de supprimer ce personnel car il est déjà utilisé dans les présences.");
+        return;
     }
 
-    function ajouterSortie(id) {
-        const item = presences.find(x => x.id === id);
-        if (!item || item.heureSortie) return;
+    if (!confirm("Voulez-vous vraiment supprimer ce personnel ?")) return;
 
-        const maintenant = new Date();
-        const hh = String(maintenant.getHours()).padStart(2, '0');
-        const mm = String(maintenant.getMinutes()).padStart(2, '0');
+    personnels = personnels.filter(item => item.id !== id);
+    sauvegarderPersonnels();
+    afficherPersonnels();
+    chargerListePersonnel();
+    afficherMessage("Personnel supprimé avec succès.", "warning");
+}
 
-        item.heureSortie = `${hh}:${mm}`;
-
-        sauvegarder();
-        afficherPresences();
-        mettreAJourStats();
-    }
-
-    function modifierPresence(id) {
-        const item = presences.find(x => x.id === id);
-        if (!item) return;
-
-        const nouveauNom = prompt('Modifier le nom :', item.nom);
-        if (nouveauNom === null) return;
-
-        const nouvelleDate = prompt('Modifier la date (AAAA-MM-JJ) :', item.date);
-        if (nouvelleDate === null) return;
-
-        const nouvelleHeure = prompt("Modifier l'heure d'arrivée (HH:MM) :", item.heureArrivee || '');
-        if (nouvelleHeure === null) return;
-
-        const nouvelleHeureSortie = prompt("Modifier l'heure de sortie (HH:MM) :", item.heureSortie || '');
-        if (nouvelleHeureSortie === null) return;
-
-        const nouveauxFrais = prompt('Modifier les frais :', item.frais ?? 0);
-        if (nouveauxFrais === null) return;
-
-        if (!nouveauNom.trim() || !nouvelleDate.trim() || !nouvelleHeure.trim() || nouveauxFrais === '' || isNaN(Number(nouveauxFrais))) {
-            alert('Modification invalide. Vérifiez les champs saisis.');
-            return;
-        }
-
-        item.nom = nouveauNom.trim();
-        item.date = nouvelleDate.trim();
-        item.heureArrivee = nouvelleHeure.trim();
-        item.heureSortie = nouvelleHeureSortie.trim();
-        item.frais = Number(nouveauxFrais);
-
-        sauvegarder();
-        afficherPresences();
-        mettreAJourStats();
-    }
-
-    function supprimerPresence(id) {
+function supprimerPresence(id) {
     const confirmation = confirm("Voulez-vous vraiment supprimer cette présence ?");
-
     if (!confirmation) return;
 
     presences = presences.filter(item => item.id !== id);
     sauvegarder();
     afficherPresences();
     mettreAJourStats();
+    afficherMessage("Présence supprimée avec succès.", "warning");
 }
 
-    function obtenirDonneesFiltrees() {
-        const rechercheNom = document.getElementById('rechercheNom').value.trim().toLowerCase();
+function obtenirDonneesFiltrees() {
+    const rechercheNom = document.getElementById('rechercheNom').value.trim().toLowerCase();
 
-        return presences.filter(item => {
-            const nomMatch = !rechercheNom || item.nom.toLowerCase().includes(rechercheNom);
-            return nomMatch;
-        });
+    return presences.filter(item => {
+        return !rechercheNom || item.nom.toLowerCase().includes(rechercheNom);
+    });
+}
+
+function afficherPersonnels() {
+    const zone = document.getElementById('tablePersonnel');
+
+    if (personnels.length === 0) {
+        zone.innerHTML = '<div class="empty">Aucun personnel enregistré.</div>';
+        return;
     }
 
-    function afficherPresences() {
-        const data = obtenirDonneesFiltrees();
-        const zone = document.getElementById('tableZone');
+    let html = `
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Matricule</th>
+                        <th>Nom</th>
+                        <th>Département</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
 
-        if (data.length === 0) {
-            zone.innerHTML = '<div class="empty">Aucune présence enregistrée.</div>';
-            return;
-        }
-
-        const afficherColonneSortie = data.some(item => item.heureSortie);
-
-        let html = `
-            <table>
-              <thead>
-                <tr>
-                  <th>Nom</th>
-                  <th>Date</th>
-                  <th>Heure d'arrivée</th>
-                  ${afficherColonneSortie ? '<th>Heure de sortie</th>' : ''}
-                  <th>Frais</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-          `;
-
-        data.forEach(item => {
-            html += `
-              <tr>
+    personnels.forEach(item => {
+        html += `
+            <tr>
+                <td data-label="Matricule">${item.matricule}</td>
                 <td data-label="Nom">${item.nom}</td>
-                <td data-label="Date">${formatDate(item.date)}</td>
-                <td data-label="Heure d'arrivée">${item.heureArrivee || '-'}</td>
-                ${afficherColonneSortie ? `<td data-label="Heure de sortie">${item.heureSortie || '-'}</td>` : ''}
-                <td data-label="Frais">${formatMontant(item.frais)} Ar</td>
+                <td data-label="Département">${item.departement}</td>
                 <td data-label="Actions">
-                  <div class="actions">
-                  <button class="btn btn-secondary" onclick="modifierPresence(${item.id})">Modifier</button>
-                    <button class="btn btn-danger" onclick="supprimerPresence(${item.id})">Supprimer</button>
-                    <button class="btn btn-primary" onclick="ajouterSortie(${item.id})" ${item.heureSortie ? 'disabled' : ''}>
-                        ${item.heureSortie ? 'Déjà sortie' : 'Sortie'}
-                    </button>    
-                  </div>
+                    <div class="actions">
+                        <button class="btn btn-secondary" onclick="ouvrirModalModifierPersonnel(${item.id})">Modifier</button>
+                        <button class="btn btn-danger" onclick="supprimerPersonnel(${item.id})">Supprimer</button>
+                    </div>
                 </td>
-              </tr>
-            `;
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    zone.innerHTML = html;
+}
+
+function afficherPresences() {
+    const data = obtenirDonneesFiltrees();
+    const zone = document.getElementById('tableZone');
+
+    if (data.length === 0) {
+        zone.innerHTML = '<div class="empty">Aucune présence enregistrée.</div>';
+        return;
+    }
+
+    let html = `
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Matricule</th>
+                        <th>Nom</th>
+                        <th>Département</th>
+                        <th>Position</th>
+                        <th>Frais</th>
+                        <th>Heure d'arrivée</th>
+                        <th>Heure de sortie</th>
+                        <th>Heures travaillées</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    data.forEach(item => {
+        html += `
+            <tr>
+                <td data-label="Matricule">${item.matricule || '-'}</td>
+                <td data-label="Nom">${item.nom}</td>
+                <td data-label="Département">${item.departement || '-'}</td>
+                <td data-label="Position">${item.localisation || '-'}</td>
+                <td data-label="Frais">${formatMontant(item.frais)} Ar</td>
+                <td data-label="Heure d'arrivée">${item.heureArrivee || '-'}</td>
+                <td data-label="Heure de sortie">${item.heureSortie || '-'}</td>
+                <td data-label="Heures travaillées">${item.heuresTravail || '-'}</td>
+                <td data-label="Date">${formatDate(item.date)}</td>
+                <td data-label="Actions">
+                    <div class="actions">
+                        <button class="btn btn-secondary" onclick="modifierPresence(${item.id})">Modifier</button>
+                        <button class="btn btn-danger" onclick="supprimerPresence(${item.id})">Supprimer</button>
+                        <button class="btn btn-primary" onclick="ajouterSortie(${item.id})" ${item.heureSortie ? 'disabled' : ''}>
+                            ${item.heureSortie ? 'Déjà sortie' : 'Sortie'}
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    zone.innerHTML = html;
+}
+
+function mettreAJourStats() {
+    document.getElementById('total').textContent = presences.length;
+
+    const totalFrais = presences.reduce((sum, item) => sum + (Number(item.frais) || 0), 0);
+    document.getElementById('totalFrais').textContent = formatMontant(totalFrais) + ' Ar';
+
+    const joursUniques = new Set(presences.map(x => x.date).filter(Boolean));
+    document.getElementById('nbJour').textContent = joursUniques.size;
+
+    const heures = presences
+        .map(x => x.heureArrivee)
+        .filter(Boolean)
+        .map(h => {
+            const [hh, mm] = h.split(':').map(Number);
+            return hh * 60 + mm;
         });
-        html += '</tbody></table>';
-        zone.innerHTML = html;
+
+    if (heures.length) {
+        const moyenne = Math.round(heures.reduce((a, b) => a + b, 0) / heures.length);
+        const hh = String(Math.floor(moyenne / 60)).padStart(2, '0');
+        const mm = String(moyenne % 60).padStart(2, '0');
+        document.getElementById('heureMoyenne').textContent = `${hh}:${mm}`;
+    } else {
+        document.getElementById('heureMoyenne').textContent = '--:--';
+    }
+}
+
+function exporterPDF() {
+    const data = obtenirDonneesFiltrees();
+    if (data.length === 0) {
+        alert('Aucune donnée à exporter.');
+        return;
     }
 
-    function mettreAJourStats() {
-        document.getElementById('total').textContent = presences.length;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
 
-        const totalFrais = presences.reduce((sum, item) => sum + (Number(item.frais) || 0), 0);
-        document.getElementById('totalFrais').textContent = formatMontant(totalFrais) + ' Ar';
+    doc.setFontSize(16);
+    doc.text('Rapport de présence', 14, 15);
 
-        const joursUniques = new Set(presences.map(x => x.date).filter(Boolean));
-        document.getElementById('nbJour').textContent = joursUniques.size;
+    doc.setFontSize(10);
+    doc.text(`Date d'export : ${new Date().toLocaleString('fr-FR')}`, 14, 22);
 
-        const heures = presences
-            .map(x => x.heureArrivee)
-            .filter(Boolean)
-            .map(h => {
-                const [hh, mm] = h.split(':').map(Number);
-                return hh * 60 + mm;
-            });
+    const totalPersonnes = data.length;
+    const totalFrais = data.reduce((sum, item) => sum + (Number(item.frais) || 0), 0);
 
-        if (heures.length) {
-            const moyenne = Math.round(heures.reduce((a, b) => a + b, 0) / heures.length);
-            const hh = String(Math.floor(moyenne / 60)).padStart(2, '0');
-            const mm = String(moyenne % 60).padStart(2, '0');
-            document.getElementById('heureMoyenne').textContent = `${hh}:${mm}`;
-        } else {
-            document.getElementById('heureMoyenne').textContent = '--:--';
-        }
-    }
+    doc.text(`Nombre de personnes ajoutées : ${totalPersonnes}`, 14, 29);
+    doc.text(`Total des frais : ${formatMontant(totalFrais)} Ar`, 14, 35);
 
-    function formatDate(dateStr) {
-        const d = new Date(dateStr);
-        return d.toLocaleDateString('fr-FR');
-    }
+    const rows = data.map(item => [
+        item.matricule || '-',
+        item.nom,
+        formatDate(item.date),
+        item.heureArrivee || '-',
+        item.heureSortie || '-',
+        item.heuresTravail || '-',
+        item.departement || '-',
+        item.localisation || '-',
+        formatMontant(item.frais) + ' Ar'
+    ]);
 
-    function formatMontant(valeur) {
-        return Number(valeur || 0).toLocaleString('fr-FR');
-    }
+    const head = [[
+        'Matricule',
+        'Nom',
+        'Date',
+        'Heure arrivée',
+        'Heure sortie',
+        'Heures travail',
+        'Département',
+        'Position',
+        'Frais'
+    ]];
 
-    function exporterPDF() {
-        const data = obtenirDonneesFiltrees();
-        if (data.length === 0) {
-            alert('Aucune donnée à exporter.');
-            return;
-        }
+    doc.autoTable({
+        head: head,
+        body: rows,
+        startY: 42
+    });
 
-        const afficherColonneSortie = data.some(item => item.heureSortie);
+    const today = new Date();
+    const day = String(today.getDate()).padStart(2, '0');
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const year = today.getFullYear();
 
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
+    const fileName = `rapport-presence-${day}-${month}-${year}.pdf`;
+    doc.save(fileName);
+}
 
-        doc.setFontSize(16);
-        doc.text('Rapport de présence', 14, 15);
-        doc.setFontSize(10);
-        doc.text(`Date d'export : ${new Date().toLocaleString('fr-FR')}`, 14, 22);
+function exporterDonneesJSON() {
+    const data = {
+        personnels: personnels,
+        presences: presences
+    };
 
-        const totalPersonnes = data.length;
-        const totalFrais = data.reduce((sum, item) => sum + (Number(item.frais) || 0), 0);
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json"
+    });
 
-        doc.text(`Nombre de personnes ajoutées : ${totalPersonnes}`, 14, 29);
-        doc.text(`Total des frais : ${formatMontant(totalFrais)} Ar`, 14, 35);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
 
-        const rows = data.map(item => {
-            const ligne = [
-                item.nom,
-                formatDate(item.date),
-                item.heureArrivee || '-'
-            ];
+    a.href = url;
+    a.download = `sauvegarde-presences-${day}-${month}-${year}.json`;
+    a.click();
 
-            if (afficherColonneSortie) {
-                ligne.push(item.heureSortie || '-');
+    URL.revokeObjectURL(url);
+}
+
+function importerDonneesJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+
+            if (!data || typeof data !== 'object') {
+                throw new Error('Format invalide');
             }
 
-            ligne.push(formatMontant(item.frais) + ' Ar');
-            return ligne;
-        });
+            personnels = Array.isArray(data.personnels) ? data.personnels : [];
+            presences = Array.isArray(data.presences) ? data.presences : [];
 
-        const head = [[
-            'Nom',
-            'Date',
-            "Heure d'arrivée",
-            ...(afficherColonneSortie ? ['Heure de sortie'] : []),
-            'Frais'
-        ]];
+            sauvegarderPersonnels();
+            sauvegarder();
 
-        doc.autoTable({
-            head: head,
-            body: rows,
-            startY: 42
-        });
-        const today = new Date();
+            chargerListePersonnel();
+            afficherPersonnels();
+            afficherPresences();
+            mettreAJourStats();
 
-        // Format JJ-MM-AAAA
-        const day = String(today.getDate()).padStart(2, '0');
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const year = today.getFullYear();
+            document.getElementById('personnelSelect').value = '';
+            document.getElementById('matriculeAffiche').value = '';
+            document.getElementById('nom').value = '';
+            document.getElementById('departement').value = '';
+            document.getElementById('localisation').value = '';
+            document.getElementById('frais').value = '';
 
-        const fileName = `rapport-presence-${day}-${month}-${year}.pdf`;
+            afficherMessage('Données importées avec succès.');
+        } catch (error) {
+            alert('Fichier JSON invalide.');
+        }
 
-        doc.save(fileName);
-    }
+        event.target.value = '';
+    };
 
-    function viderDonnees() {
-        if (!confirm('Voulez-vous vraiment supprimer toutes les données ?')) return;
-        presences = [];
-        sauvegarder();
-        afficherPresences();
-        mettreAJourStats();
-    }
+    reader.readAsText(file);
+}
 
-    function deconnexion() {
-        sessionStorage.removeItem("slmi_user");
-        window.location.href = "../index.html";
-    }
+function viderDonnees() {
+    if (!confirm('Voulez-vous vraiment supprimer toutes les présences ?')) return;
+
+    presences = [];
+    sauvegarder();
+
     afficherPresences();
     mettreAJourStats();
+
+    document.getElementById('personnelSelect').value = '';
+    document.getElementById('matriculeAffiche').value = '';
+    document.getElementById('nom').value = '';
+    document.getElementById('departement').value = '';
+    document.getElementById('localisation').value = '';
+    document.getElementById('frais').value = '';
+
+    afficherMessage("Toutes les présences ont été supprimées.", "warning");
+}
+
+function deconnexion() {
+    sessionStorage.removeItem("slmi_user");
+    window.location.href = "../index.html";
+}
+
+chargerListePersonnel();
+afficherPersonnels();
+afficherPresences();
+mettreAJourStats();
+setInterval(mettreHeureActuelle, 30000);
