@@ -14,24 +14,28 @@
 
 <body>
     <div class="container">
+        <div id="messageBox"></div>
+
         <div class="card">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h1 class="mb-0">
                     <img src="../img/logo slmi.png" width="200px" alt="">
                 </h1>
-            
+
                 <div class="dropdown text-end">
                     <button class="btn btn-outline-success dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="userDropdown">
-                        <span class="dropdown-item-text fw-bold" id="userConnecte"></span>
+                        <span class="fw-bold" id="userConnecte"></span>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end">
-                        <li><span class="dropdown-item-text fw-bold" id="userConnecte"></span></li>
+                        <li><span class="dropdown-item-text fw-bold" id="userConnecteNom"></span></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><button class="dropdown-item text-danger" onclick="deconnexion()">Déconnexion</button></li>
                     </ul>
                 </div>
             </div>
+
             <hr>
+
             <h4>Statistiques</h4>
             <div class="stats">
                 <div class="stat-box">
@@ -52,21 +56,70 @@
                 </div>
             </div>
         </div>
+
         <div class="card">
-            
+            <div class="top-actions">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalPersonnel">
+                    Ajouter un personnel
+                </button>
+                <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#modalListePersonnel" onclick="afficherPersonnels()">
+                    Voir liste des personnels
+                </button>
+                <button class="btn btn-secondary" onclick="exporterDonneesJSON()">
+                    Exporter JSON
+                </button>
+                <label class="btn btn-primary m-0">
+                    Importer JSON
+                    <input type="file" id="importJson" accept=".json" onchange="importerDonneesJSON(event)" hidden>
+                </label>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Enregistrement de présence</h2>
+
             <div class="grid">
                 <div>
-                    <label>Nom</label>
-                    <input type="text" id="nom" placeholder="Ex: Jean Rakoto" />
+                    <label>Personnel</label>
+                    <select id="personnelSelect" onchange="remplirInfosPersonnel()">
+                        <option value="">-- Sélectionner un personnel --</option>
+                    </select>
                 </div>
+
+                <div>
+                    <label>Matricule</label>
+                    <input type="text" id="matriculeAffiche" placeholder="Matricule" readonly />
+                </div>
+
+                <div>
+                    <label>Nom</label>
+                    <input type="text" id="nom" placeholder="Nom" readonly />
+                </div>
+
+                <div>
+                    <label>Département</label>
+                    <input type="text" id="departement" placeholder="Département" readonly />
+                </div>
+
+                <div>
+                    <label>Position</label>
+                    <select id="localisation">
+                        <option value="">-- Sélectionner --</option>
+                        <option value="Local">Local</option>
+                        <option value="Sur terrain">Sur terrain</option>
+                    </select>
+                </div>
+
                 <div style="display: none;">
                     <label>Date</label>
                     <input type="date" id="datePresence" />
                 </div>
+
                 <div>
                     <label>Heure d'arrivée</label>
-                    <input type="time" id="heureArrivee" />
+                    <input type="time" id="heureArrivee" readonly />
                 </div>
+
                 <div>
                     <label>Frais (Ar)</label>
                     <div style="display:flex; gap:6px; align-items:center;">
@@ -75,13 +128,11 @@
                     </div>
                 </div>
             </div>
+
             <div class="top-actions">
                 <button class="btn btn-primary" onclick="ajouterPresence()">Ajouter</button>
-                
             </div>
         </div>
-
-       
 
         <div class="card">
             <h2>Liste des présences</h2>
@@ -89,14 +140,13 @@
                 <div>
                     <div class="row">
                         <div class="col-md-4">
-                            
-                    <input type="text" id="rechercheNom" placeholder="Rechercher un nom..." oninput="afficherPresences()" />
+                            <input type="text" id="rechercheNom" placeholder="Rechercher un nom..." oninput="afficherPresences()" />
                         </div>
                         <div class="col-md-4">
                             <button class="btn btn-secondary" onclick="exporterPDF()">Exporter en PDF</button>
                         </div>
                         <div class="col-md-4">
-                            <button class="btn btn-danger" onclick="viderDonnees()">Vider toutes les données</button>
+                            <button class="btn btn-danger" onclick="viderDonnees()">Vider les présences</button>
                         </div>
                     </div>
                 </div>
@@ -105,6 +155,106 @@
         </div>
     </div>
 
+    <!-- MODAL AJOUT PERSONNEL -->
+    <div class="modal fade" id="modalPersonnel" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Ajouter un personnel</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label>Nom</label>
+                        <input type="text" id="nomPersonnel" class="form-control" placeholder="Ex: Jean Rakoto">
+                    </div>
+
+                    <div class="mb-3">
+                        <label>Département</label>
+                        <select id="departementPersonnel" class="form-select">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="DSI">DSI</option>
+                            <option value="Finance">Finance</option>
+                            <option value="Room">control room</option>
+                            <option value="Technique">Technique</option>
+                            <option value="stagiaire">stagiaire</option>
+                            <option value="Administration">Administration</option>
+                            <option value="RH">RH</option>
+                            <option value="Direction">Direction</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button class="btn btn-primary" onclick="ajouterPersonnel()">Enregistrer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL LISTE PERSONNEL -->
+    <div class="modal fade" id="modalListePersonnel" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Liste des personnels</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div id="tablePersonnel"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL MODIFIER PERSONNEL -->
+    <div class="modal fade" id="modalModifierPersonnel" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Modifier un personnel</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" id="editPersonnelId">
+
+                    <div class="mb-3">
+                        <label>Matricule</label>
+                        <input type="text" id="editMatriculePersonnel" class="form-control" readonly>
+                    </div>
+
+                    <div class="mb-3">
+                        <label>Nom</label>
+                        <input type="text" id="editNomPersonnel" class="form-control">
+                    </div>
+
+                    <div class="mb-3">
+                        <label>Département</label>
+                        <select id="editDepartementPersonnel" class="form-select">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="DSI">DSI</option>
+                            <option value="Finance">Finance</option>
+                            <option value="Room">control room</option>
+                            <option value="Technique">Technique</option>
+                            <option value="stagiaire">stagiaire</option>
+                            <option value="Administration">Administration</option>
+                            <option value="RH">RH</option>
+                            <option value="Direction">Direction</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button class="btn btn-primary" onclick="validerModificationPersonnel()">Enregistrer</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
 </body>
 <script src="../js/index.js"></script>
