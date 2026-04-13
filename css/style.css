@@ -1,5 +1,4 @@
-
-    * {
+* {
     box-sizing: border-box;
 }
 
@@ -25,7 +24,8 @@ body {
 }
 
 h1,
-h2 {
+h2,
+h4 {
     margin-top: 0;
 }
 
@@ -36,7 +36,8 @@ h2 {
 }
 
 input,
-button {
+button,
+select {
     width: 100%;
     padding: 12px;
     border-radius: 10px;
@@ -153,9 +154,11 @@ tr:hover td {
     tr {
         display: block;
     }
+
     thead {
         display: none;
     }
+
     tr {
         background: #fff;
         margin-bottom: 12px;
@@ -163,10 +166,12 @@ tr:hover td {
         border-radius: 12px;
         padding: 10px;
     }
+
     td {
         border: none;
         padding: 8px 0;
     }
+
     td::before {
         content: attr(data-label) ": ";
         font-weight: bold;
