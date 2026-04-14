@@ -91,10 +91,13 @@ function calculerHeuresTravail(heureArrivee, heureSortie) {
     const [h1, m1] = heureArrivee.split(':').map(Number);
     const [h2, m2] = heureSortie.split(':').map(Number);
 
-    const debut = h1 * 60 + m1;
-    const fin = h2 * 60 + m2;
+    let debut = h1 * 60 + m1;
+    let fin = h2 * 60 + m2;
 
-    if (fin < debut) return '-';
+    // 🔥 CORRECTION ICI (travail de nuit)
+    if (fin < debut) {
+        fin += 24 * 60; // ajouter 24h
+    }
 
     const diff = fin - debut;
     const heures = Math.floor(diff / 60);
@@ -500,7 +503,13 @@ function afficherPresences() {
                 <td data-label="Frais">${formatMontant(item.frais)} Ar</td>
                 <td data-label="Heure d'arrivée">${item.heureArrivee || '-'}</td>
                 <td data-label="Heure de sortie">${item.heureSortie || '-'}</td>
-                <td data-label="Heures travaillées">${item.heuresTravail || '-'}</td>
+                <td data-label="Heures travaillées">
+    ${
+        item.heureSortie 
+        ? calculerHeuresTravail(item.heureArrivee, item.heureSortie)
+        : '-'
+    }
+</td>
                 <td data-label="Date">${formatDate(item.date)}</td>
                 <td data-label="Actions">
                     <div class="actions">
