@@ -123,6 +123,7 @@ function ajouterPersonnel() {
     sauvegarderPersonnels();
     afficherPersonnels();
     chargerListePersonnel();
+    remplirFiltreDepartement();
 
     document.getElementById('nomPersonnel').value = '';
     document.getElementById('departementPersonnel').value = '';
@@ -282,6 +283,7 @@ function validerModificationPersonnel() {
     sauvegarder();
     afficherPersonnels();
     chargerListePersonnel();
+    remplirFiltreDepartement();
     afficherPresences();
 
     afficherMessage("Personnel modifié avec succès.");
@@ -304,6 +306,7 @@ function supprimerPersonnel(id) {
     sauvegarderPersonnels();
     afficherPersonnels();
     chargerListePersonnel();
+    remplirFiltreDepartement();
     afficherMessage("Personnel supprimé avec succès.", "warning");
 }
 
@@ -318,19 +321,103 @@ function supprimerPresence(id) {
     afficherMessage("Présence supprimée avec succès.", "warning");
 }
 
+function remplirFiltreDepartement() {
+    const select = document.getElementById('filtreDepartement');
+    if (!select) return;
+
+    const valeurActuelle = select.value;
+
+    const departements = [...new Set(personnels.map(p => p.departement).filter(Boolean))].sort();
+
+    select.innerHTML = `<option value="">Tous les départements</option>`;
+
+    departements.forEach(dep => {
+        const option = document.createElement('option');
+        option.value = dep;
+        option.textContent = dep;
+        select.appendChild(option);
+    });
+
+    if ([...select.options].some(opt => opt.value === valeurActuelle)) {
+        select.value = valeurActuelle;
+    }
+}
+
 function obtenirDonneesFiltrees() {
-    const rechercheNom = document.getElementById('rechercheNom').value.trim().toLowerCase();
+    const rechercheNom = document.getElementById('rechercheNom')?.value.trim().toLowerCase() || '';
+    const filtreDepartement = document.getElementById('filtreDepartement')?.value || '';
+    const filtreLocalisation = document.getElementById('filtreLocalisation')?.value || '';
+    const dateDebut = document.getElementById('dateDebutFiltre')?.value || '';
+    const dateFin = document.getElementById('dateFinFiltre')?.value || '';
 
     return presences.filter(item => {
-        return !rechercheNom || item.nom.toLowerCase().includes(rechercheNom);
+        const correspondRecherche =
+            !rechercheNom ||
+            (item.nom || '').toLowerCase().includes(rechercheNom) ||
+            (item.matricule || '').toLowerCase().includes(rechercheNom);
+
+        const correspondDepartement =
+            !filtreDepartement || item.departement === filtreDepartement;
+
+        const correspondLocalisation =
+            !filtreLocalisation || item.localisation === filtreLocalisation;
+
+        const correspondDateDebut =
+            !dateDebut || item.date >= dateDebut;
+
+        const correspondDateFin =
+            !dateFin || item.date <= dateFin;
+
+        return correspondRecherche &&
+            correspondDepartement &&
+            correspondLocalisation &&
+            correspondDateDebut &&
+            correspondDateFin;
     });
+}
+
+function obtenirPersonnelsFiltres() {
+    const recherche = document.getElementById('recherchePersonnel')?.value.trim().toLowerCase() || '';
+
+    return personnels.filter(item => {
+        return !recherche ||
+            (item.nom || '').toLowerCase().includes(recherche) ||
+            (item.matricule || '').toLowerCase().includes(recherche) ||
+            (item.departement || '').toLowerCase().includes(recherche);
+    });
+}
+
+function afficherResumeFiltres(nb) {
+    const zone = document.getElementById('resumeFiltres');
+    if (!zone) return;
+
+    const rechercheNom = document.getElementById('rechercheNom')?.value.trim() || '';
+    const filtreDepartement = document.getElementById('filtreDepartement')?.value || '';
+    const filtreLocalisation = document.getElementById('filtreLocalisation')?.value || '';
+    const dateDebut = document.getElementById('dateDebutFiltre')?.value || '';
+    const dateFin = document.getElementById('dateFinFiltre')?.value || '';
+
+    const filtres = [];
+
+    if (rechercheNom) filtres.push(`Recherche : ${rechercheNom}`);
+    if (filtreDepartement) filtres.push(`Département : ${filtreDepartement}`);
+    if (filtreLocalisation) filtres.push(`Position : ${filtreLocalisation}`);
+    if (dateDebut) filtres.push(`Du : ${formatDate(dateDebut)}`);
+    if (dateFin) filtres.push(`Au : ${formatDate(dateFin)}`);
+
+    if (filtres.length === 0) {
+        zone.innerHTML = `<strong>${nb}</strong> présence(s) affichée(s)`;
+    } else {
+        zone.innerHTML = `<strong>${nb}</strong> présence(s) affichée(s) | ${filtres.join(' | ')}`;
+    }
 }
 
 function afficherPersonnels() {
     const zone = document.getElementById('tablePersonnel');
+    const data = obtenirPersonnelsFiltres();
 
-    if (personnels.length === 0) {
-        zone.innerHTML = '<div class="empty">Aucun personnel enregistré.</div>';
+    if (data.length === 0) {
+        zone.innerHTML = '<div class="empty">Aucun personnel trouvé.</div>';
         return;
     }
 
@@ -348,7 +435,7 @@ function afficherPersonnels() {
                 <tbody>
     `;
 
-    personnels.forEach(item => {
+    data.forEach(item => {
         html += `
             <tr>
                 <td data-label="Matricule">${item.matricule}</td>
@@ -376,8 +463,10 @@ function afficherPresences() {
     const data = obtenirDonneesFiltrees();
     const zone = document.getElementById('tableZone');
 
+    afficherResumeFiltres(data.length);
+
     if (data.length === 0) {
-        zone.innerHTML = '<div class="empty">Aucune présence enregistrée.</div>';
+        zone.innerHTML = '<div class="empty">Aucune présence trouvée avec ces filtres.</div>';
         return;
     }
 
@@ -385,7 +474,7 @@ function afficherPresences() {
         <div class="table-responsive">
             <table class="table table-bordered table-striped">
                 <thead>
-                    <tr>
+                    <tr >
                         <th>Matricule</th>
                         <th>Nom</th>
                         <th>Département</th>
@@ -468,6 +557,9 @@ function exporterPDF() {
         return;
     }
 
+    const dateDebut = document.getElementById('dateDebutFiltre')?.value || '';
+    const dateFin = document.getElementById('dateFinFiltre')?.value || '';
+
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
@@ -477,11 +569,15 @@ function exporterPDF() {
     doc.setFontSize(10);
     doc.text(`Date d'export : ${new Date().toLocaleString('fr-FR')}`, 14, 22);
 
+    if (dateDebut || dateFin) {
+        doc.text(`Période filtrée : ${dateDebut ? formatDate(dateDebut) : '---'} au ${dateFin ? formatDate(dateFin) : '---'}`, 14, 28);
+    }
+
     const totalPersonnes = data.length;
     const totalFrais = data.reduce((sum, item) => sum + (Number(item.frais) || 0), 0);
 
-    doc.text(`Nombre de personnes ajoutées : ${totalPersonnes}`, 14, 29);
-    doc.text(`Total des frais : ${formatMontant(totalFrais)} Ar`, 14, 35);
+    doc.text(`Nombre de présences : ${totalPersonnes}`, 14, 34);
+    doc.text(`Total des frais : ${formatMontant(totalFrais)} Ar`, 14, 40);
 
     const rows = data.map(item => [
         item.matricule || '-',
@@ -510,7 +606,7 @@ function exporterPDF() {
     doc.autoTable({
         head: head,
         body: rows,
-        startY: 42
+        startY: 47
     });
 
     const today = new Date();
@@ -520,6 +616,119 @@ function exporterPDF() {
 
     const fileName = `rapport-presence-${day}-${month}-${year}.pdf`;
     doc.save(fileName);
+}
+
+function imprimerPresencesFiltrees() {
+    const data = obtenirDonneesFiltrees();
+
+    if (data.length === 0) {
+        alert('Aucune donnée à imprimer.');
+        return;
+    }
+
+    const rechercheNom = document.getElementById('rechercheNom')?.value.trim() || '';
+    const filtreDepartement = document.getElementById('filtreDepartement')?.value || '';
+    const filtreLocalisation = document.getElementById('filtreLocalisation')?.value || '';
+    const dateDebut = document.getElementById('dateDebutFiltre')?.value || '';
+    const dateFin = document.getElementById('dateFinFiltre')?.value || '';
+
+    const infosFiltres = [];
+    if (rechercheNom) infosFiltres.push(`Recherche : ${rechercheNom}`);
+    if (filtreDepartement) infosFiltres.push(`Département : ${filtreDepartement}`);
+    if (filtreLocalisation) infosFiltres.push(`Position : ${filtreLocalisation}`);
+    if (dateDebut) infosFiltres.push(`Du : ${formatDate(dateDebut)}`);
+    if (dateFin) infosFiltres.push(`Au : ${formatDate(dateFin)}`);
+
+    const lignes = data.map(item => `
+        <tr>
+            <td>${item.matricule || '-'}</td>
+            <td>${item.nom || '-'}</td>
+            <td>${item.departement || '-'}</td>
+            <td>${item.localisation || '-'}</td>
+            <td>${formatMontant(item.frais)} Ar</td>
+            <td>${item.heureArrivee || '-'}</td>
+            <td>${item.heureSortie || '-'}</td>
+            <td>${item.heuresTravail || '-'}</td>
+            <td>${formatDate(item.date)}</td>
+        </tr>
+    `).join('');
+
+    const contenu = `
+        <html>
+        <head>
+            <title>Impression présences filtrées</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    padding: 20px;
+                    color: #222;
+                }
+                h2 {
+                    margin-bottom: 10px;
+                }
+                .meta {
+                    margin-bottom: 15px;
+                    font-size: 14px;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 15px;
+                }
+                th, td {
+                    border: 1px solid #ccc;
+                    padding: 8px;
+                    font-size: 12px;
+                    text-align: left;
+                }
+                th {
+                    background: #f1f1f1;
+                }
+            </style>
+        </head>
+        <body>
+            <h2>Liste des présences filtrées</h2>
+            <div class="meta"><strong>Date d'impression :</strong> ${new Date().toLocaleString('fr-FR')}</div>
+            <div class="meta"><strong>Filtres :</strong> ${infosFiltres.length ? infosFiltres.join(' | ') : 'Tous'}</div>
+            <div class="meta"><strong>Nombre de lignes :</strong> ${data.length}</div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Matricule</th>
+                        <th>Nom</th>
+                        <th>Département</th>
+                        <th>Position</th>
+                        <th>Frais</th>
+                        <th>Heure arrivée</th>
+                        <th>Heure sortie</th>
+                        <th>Heures travaillées</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${lignes}
+                </tbody>
+            </table>
+        </body>
+        </html>
+    `;
+
+    const fenetre = window.open('', '_blank');
+    fenetre.document.open();
+    fenetre.document.write(contenu);
+    fenetre.document.close();
+    fenetre.focus();
+    fenetre.print();
+}
+
+function reinitialiserFiltres() {
+    document.getElementById('rechercheNom').value = '';
+    document.getElementById('filtreDepartement').value = '';
+    document.getElementById('filtreLocalisation').value = '';
+    document.getElementById('dateDebutFiltre').value = '';
+    document.getElementById('dateFinFiltre').value = '';
+    afficherPresences();
 }
 
 function exporterDonneesJSON() {
@@ -567,6 +776,7 @@ function importerDonneesJSON(event) {
             sauvegarder();
 
             chargerListePersonnel();
+            remplirFiltreDepartement();
             afficherPersonnels();
             afficherPresences();
             mettreAJourStats();
@@ -614,6 +824,7 @@ function deconnexion() {
 }
 
 chargerListePersonnel();
+remplirFiltreDepartement();
 afficherPersonnels();
 afficherPresences();
 mettreAJourStats();
