@@ -136,21 +136,49 @@
 
         <div class="card">
             <h2>Liste des présences</h2>
+            <div class="top-actions">
+                <button class="btn btn-secondary" onclick="exporterPDF()">Exporter en PDF</button>
+                <button class="btn btn-primary" onclick="imprimerPresencesFiltrees()">Imprimer </button>
+                <button class="btn btn-secondary" onclick="reinitialiserFiltres()">Réinitialiser les filtres</button>
+                <button class="btn btn-danger" onclick="viderDonnees()">Vider les présences</button>
+            </div>
+            <br>
             <div class="grid">
                 <div>
-                    <div class="row">
-                        <div class="col-md-4">
-                            <input type="text" id="rechercheNom" placeholder="Rechercher un nom..." oninput="afficherPresences()" />
-                        </div>
-                        <div class="col-md-4">
-                            <button class="btn btn-secondary" onclick="exporterPDF()">Exporter en PDF</button>
-                        </div>
-                        <div class="col-md-4">
-                            <button class="btn btn-danger" onclick="viderDonnees()">Vider les présences</button>
-                        </div>
-                    </div>
+                    <label>Recherche nom / matricule</label>
+                    <input type="text" id="rechercheNom" placeholder="Ex: Rakoto ou EMP001" oninput="afficherPresences()" />
+                </div>
+
+                <div>
+                    <label>Département</label>
+                    <select id="filtreDepartement" onchange="afficherPresences()">
+                        <option value="">Tous les départements</option>
+                    </select>
+                </div>
+
+                <!-- <div>
+                    <label>Position</label>
+                    <select id="filtreLocalisation" onchange="afficherPresences()">
+                        <option value="">Toutes les positions</option>
+                        <option value="Local">Local</option>
+                        <option value="Sur terrain">Sur terrain</option>
+                    </select>
+                </div> -->
+
+                <div>
+                    <label>Date début</label>
+                    <input type="date" id="dateDebutFiltre" onchange="afficherPresences()" />
+                </div>
+
+                <div>
+                    <label>Date fin</label>
+                    <input type="date" id="dateFinFiltre" onchange="afficherPresences()" />
                 </div>
             </div>
+            
+
+            <br>
+            <div id="resumeFiltres" class="filter-summary"></div>
             <div id="tableZone"></div>
         </div>
     </div>
@@ -204,6 +232,12 @@
                 </div>
 
                 <div class="modal-body">
+                    <div class="grid mb-3">
+                        <div>
+                            <label>Recherche personnel</label>
+                            <input type="text" id="recherchePersonnel" placeholder="Nom, matricule, département..." oninput="afficherPersonnels()">
+                        </div>
+                    </div>
                     <div id="tablePersonnel"></div>
                 </div>
             </div>
