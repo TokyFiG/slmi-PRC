@@ -48,7 +48,7 @@ function getHeureActuelle() {
 
 function mettreHeureActuelle() {
     const champHeure = document.getElementById('heureArrivee');
-    if (champHeure) {
+    if (champHeure && !champHeure.value) {
         champHeure.value = getHeureActuelle();
     }
 }
@@ -94,9 +94,8 @@ function calculerHeuresTravail(heureArrivee, heureSortie) {
     let debut = h1 * 60 + m1;
     let fin = h2 * 60 + m2;
 
-    // 🔥 CORRECTION ICI (travail de nuit)
     if (fin < debut) {
-        fin += 24 * 60; // ajouter 24h
+        fin += 24 * 60;
     }
 
     const diff = fin - debut;
@@ -158,6 +157,11 @@ function remplirInfosPersonnel() {
     document.getElementById('nom').value = item ? item.nom : '';
     document.getElementById('departement').value = item ? item.departement : '';
     document.getElementById('frais').value = '';
+
+    const champHeure = document.getElementById('heureArrivee');
+    if (champHeure && !champHeure.value) {
+        champHeure.value = getHeureActuelle();
+    }
 }
 
 function ajouterPresence() {
@@ -167,19 +171,13 @@ function ajouterPresence() {
     const departement = document.getElementById('departement').value.trim();
     const localisation = document.getElementById('localisation').value;
     const date = document.getElementById('datePresence').value;
-    const heureArrivee = getHeureActuelle();
+    const heureArrivee = document.getElementById('heureArrivee').value;
     const frais = document.getElementById('frais').value || 0;
 
-    if (!personnelId || !matricule || !nom || !departement || !localisation || !date) {
-        alert('Merci de sélectionner un personnel et une position.');
+    if (!personnelId || !matricule || !nom || !departement || !localisation || !date || !heureArrivee) {
+        alert('Merci de sélectionner un personnel, une position et une heure d\'arrivée.');
         return;
     }
-
-    // const dejaPresent = presences.some(item => item.personnelId === personnelId && item.date === date);
-    // if (dejaPresent) {
-    //     alert('Cette personne a déjà une présence enregistrée aujourd’hui.');
-    //     return;
-    // }
 
     presences.push({
         id: Date.now(),
@@ -206,7 +204,7 @@ function ajouterPresence() {
     document.getElementById('localisation').value = '';
     document.getElementById('frais').value = '';
     document.getElementById('datePresence').value = getDateAujourdhui();
-    mettreHeureActuelle();
+    document.getElementById('heureArrivee').value = getHeureActuelle();
 
     afficherMessage("Présence ajoutée avec succès.");
 }
@@ -229,14 +227,27 @@ function modifierPresence(id) {
     const item = presences.find(x => x.id === id);
     if (!item) return;
 
-    const nouveauxFrais = prompt('Modifier les frais :', item.frais ?? 0);
-    if (nouveauxFrais === null) return;
+    const nouvelleHeureArrivee = prompt(
+        "Modifier l'heure d'arrivée (format HH:MM) :",
+        item.heureArrivee || ""
+    );
+    if (nouvelleHeureArrivee === null) return;
 
-    if (nouveauxFrais === '' || isNaN(Number(nouveauxFrais))) {
-        alert('Modification invalide. Vérifiez le montant.');
+    const formatHeureValide = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!formatHeureValide.test(nouvelleHeureArrivee)) {
+        alert("Heure d'arrivée invalide. Utilisez le format HH:MM.");
         return;
     }
 
+    const nouveauxFrais = prompt("Modifier les frais :", item.frais ?? 0);
+    if (nouveauxFrais === null) return;
+
+    if (nouveauxFrais === '' || isNaN(Number(nouveauxFrais))) {
+        alert("Modification invalide. Vérifiez le montant.");
+        return;
+    }
+
+    item.heureArrivee = nouvelleHeureArrivee;
     item.frais = Number(nouveauxFrais);
     item.heuresTravail = calculerHeuresTravail(item.heureArrivee, item.heureSortie);
 
@@ -477,7 +488,7 @@ function afficherPresences() {
         <div class="table-responsive">
             <table class="table table-bordered table-striped">
                 <thead>
-                    <tr >
+                    <tr>
                         <th>Matricule</th>
                         <th>Nom</th>
                         <th>Département</th>
@@ -504,12 +515,8 @@ function afficherPresences() {
                 <td data-label="Heure d'arrivée">${item.heureArrivee || '-'}</td>
                 <td data-label="Heure de sortie">${item.heureSortie || '-'}</td>
                 <td data-label="Heures travaillées">
-    ${
-        item.heureSortie 
-        ? calculerHeuresTravail(item.heureArrivee, item.heureSortie)
-        : '-'
-    }
-</td>
+                    ${item.heureSortie ? calculerHeuresTravail(item.heureArrivee, item.heureSortie) : '-'}
+                </td>
                 <td data-label="Date">${formatDate(item.date)}</td>
                 <td data-label="Actions">
                     <div class="actions">
@@ -594,7 +601,7 @@ function exporterPDF() {
         formatDate(item.date),
         item.heureArrivee || '-',
         item.heureSortie || '-',
-        item.heuresTravail || '-',
+        item.heureSortie ? calculerHeuresTravail(item.heureArrivee, item.heureSortie) : '-',
         item.departement || '-',
         item.localisation || '-',
         formatMontant(item.frais) + ' Ar'
@@ -657,7 +664,7 @@ function imprimerPresencesFiltrees() {
             <td>${formatMontant(item.frais)} Ar</td>
             <td>${item.heureArrivee || '-'}</td>
             <td>${item.heureSortie || '-'}</td>
-            <td>${item.heuresTravail || '-'}</td>
+            <td>${item.heureSortie ? calculerHeuresTravail(item.heureArrivee, item.heureSortie) : '-'}</td>
             <td>${formatDate(item.date)}</td>
         </tr>
     `).join('');
@@ -734,7 +741,12 @@ function imprimerPresencesFiltrees() {
 function reinitialiserFiltres() {
     document.getElementById('rechercheNom').value = '';
     document.getElementById('filtreDepartement').value = '';
-    document.getElementById('filtreLocalisation').value = '';
+
+    const filtreLocalisation = document.getElementById('filtreLocalisation');
+    if (filtreLocalisation) {
+        filtreLocalisation.value = '';
+    }
+
     document.getElementById('dateDebutFiltre').value = '';
     document.getElementById('dateFinFiltre').value = '';
     afficherPresences();
@@ -796,6 +808,7 @@ function importerDonneesJSON(event) {
             document.getElementById('departement').value = '';
             document.getElementById('localisation').value = '';
             document.getElementById('frais').value = '';
+            document.getElementById('heureArrivee').value = getHeureActuelle();
 
             afficherMessage('Données importées avec succès.');
         } catch (error) {
@@ -823,6 +836,7 @@ function viderDonnees() {
     document.getElementById('departement').value = '';
     document.getElementById('localisation').value = '';
     document.getElementById('frais').value = '';
+    document.getElementById('heureArrivee').value = getHeureActuelle();
 
     afficherMessage("Toutes les présences ont été supprimées.", "warning");
 }
@@ -837,4 +851,10 @@ remplirFiltreDepartement();
 afficherPersonnels();
 afficherPresences();
 mettreAJourStats();
-setInterval(mettreHeureActuelle, 30000);
+
+setInterval(() => {
+    const champHeure = document.getElementById('heureArrivee');
+    if (champHeure && !champHeure.matches(':focus')) {
+        champHeure.value = getHeureActuelle();
+    }
+}, 30000);
