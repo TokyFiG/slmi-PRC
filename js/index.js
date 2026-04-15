@@ -21,6 +21,7 @@ mettreHeureActuelle();
 
 function afficherMessage(message, type = "success") {
     const box = document.getElementById("messageBox");
+    if (!box) return;
 
     box.innerHTML = `
         <div class="alert alert-${type} alert-dismissible fade show shadow" role="alert">
@@ -36,7 +37,10 @@ function afficherMessage(message, type = "success") {
 
 function getDateAujourdhui() {
     const now = new Date();
-    return now.toISOString().split('T')[0];
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 function getHeureActuelle() {
@@ -77,33 +81,80 @@ function sauvegarderPersonnels() {
 
 function formatDate(dateStr) {
     if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('fr-FR');
+
+    const [year, month, day] = dateStr.split('-');
+    if (!year || !month || !day) return dateStr;
+
+    return `${day}/${month}/${year}`;
 }
 
 function formatMontant(valeur) {
     return Number(valeur || 0).toLocaleString('fr-FR');
 }
 
-function calculerHeuresTravail(heureArrivee, heureSortie) {
-    if (!heureArrivee || !heureSortie) return '-';
+function creerDateTime(dateStr, heureStr) {
+    if (!dateStr || !heureStr) return null;
 
-    const [h1, m1] = heureArrivee.split(':').map(Number);
-    const [h2, m2] = heureSortie.split(':').map(Number);
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hours, minutes] = heureStr.split(':').map(Number);
 
-    let debut = h1 * 60 + m1;
-    let fin = h2 * 60 + m2;
-
-    // 🔥 CORRECTION ICI (travail de nuit)
-    if (fin < debut) {
-        fin += 24 * 60; // ajouter 24h
+    if (
+        isNaN(year) || isNaN(month) || isNaN(day) ||
+        isNaN(hours) || isNaN(minutes)
+    ) {
+        return null;
     }
 
-    const diff = fin - debut;
-    const heures = Math.floor(diff / 60);
-    const minutes = diff % 60;
+    return new Date(year, month - 1, day, hours, minutes, 0, 0);
+}
+
+function calculerHeuresTravail(dateArrivee, heureArrivee, dateSortie, heureSortie) {
+    if (!dateArrivee || !heureArrivee || !dateSortie || !heureSortie) return '-';
+
+    const debut = creerDateTime(dateArrivee, heureArrivee);
+    const fin = creerDateTime(dateSortie, heureSortie);
+
+    if (!debut || !fin) return '-';
+
+    let diff = fin.getTime() - debut.getTime();
+
+    // sécurité si ancienne donnée sans dateSortie correcte
+    if (diff < 0) {
+        diff += 24 * 60 * 60 * 1000;
+    }
+
+    const totalMinutes = Math.floor(diff / 60000);
+    const heures = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
 
     return `${String(heures).padStart(2, '0')}h${String(minutes).padStart(2, '0')}`;
+}
+
+function migrerAnciennesDonnees() {
+    let modifie = false;
+
+    presences = presences.map(item => {
+        if (!item.dateArrivee) {
+            item.dateArrivee = item.date || '';
+            modifie = true;
+        }
+
+        if (!item.dateSortie && item.heureSortie) {
+            item.dateSortie = item.dateArrivee || item.date || '';
+            modifie = true;
+        }
+
+        item.heuresTravail = calculerHeuresTravail(
+            item.dateArrivee || item.date || '',
+            item.heureArrivee || '',
+            item.dateSortie || '',
+            item.heureSortie || ''
+        );
+
+        return item;
+    });
+
+    if (modifie) sauvegarder();
 }
 
 function ajouterPersonnel() {
@@ -140,6 +191,8 @@ function ajouterPersonnel() {
 
 function chargerListePersonnel() {
     const select = document.getElementById('personnelSelect');
+    if (!select) return;
+
     select.innerHTML = `<option value="">-- Sélectionner un personnel --</option>`;
 
     personnels.forEach(item => {
@@ -166,20 +219,14 @@ function ajouterPresence() {
     const nom = document.getElementById('nom').value.trim();
     const departement = document.getElementById('departement').value.trim();
     const localisation = document.getElementById('localisation').value;
-    const date = document.getElementById('datePresence').value;
+    const dateArrivee = document.getElementById('datePresence').value;
     const heureArrivee = getHeureActuelle();
     const frais = document.getElementById('frais').value || 0;
 
-    if (!personnelId || !matricule || !nom || !departement || !localisation || !date) {
+    if (!personnelId || !matricule || !nom || !departement || !localisation || !dateArrivee) {
         alert('Merci de sélectionner un personnel et une position.');
         return;
     }
-
-    // const dejaPresent = presences.some(item => item.personnelId === personnelId && item.date === date);
-    // if (dejaPresent) {
-    //     alert('Cette personne a déjà une présence enregistrée aujourd’hui.');
-    //     return;
-    // }
 
     presences.push({
         id: Date.now(),
@@ -188,8 +235,10 @@ function ajouterPresence() {
         nom,
         departement,
         localisation,
-        date,
+        date: dateArrivee, // conservé pour compatibilité ancienne logique
+        dateArrivee,
         heureArrivee,
+        dateSortie: '',
         heureSortie: '',
         frais: Number(frais),
         heuresTravail: '-'
@@ -215,9 +264,17 @@ function ajouterSortie(id) {
     const item = presences.find(x => x.id === id);
     if (!item || item.heureSortie) return;
 
+    const dateSortie = getDateAujourdhui();
     const heureSortie = getHeureActuelle();
+
+    item.dateSortie = dateSortie;
     item.heureSortie = heureSortie;
-    item.heuresTravail = calculerHeuresTravail(item.heureArrivee, item.heureSortie);
+    item.heuresTravail = calculerHeuresTravail(
+        item.dateArrivee || item.date,
+        item.heureArrivee,
+        item.dateSortie,
+        item.heureSortie
+    );
 
     sauvegarder();
     afficherPresences();
@@ -238,7 +295,12 @@ function modifierPresence(id) {
     }
 
     item.frais = Number(nouveauxFrais);
-    item.heuresTravail = calculerHeuresTravail(item.heureArrivee, item.heureSortie);
+    item.heuresTravail = calculerHeuresTravail(
+        item.dateArrivee || item.date,
+        item.heureArrivee,
+        item.dateSortie || '',
+        item.heureSortie || ''
+    );
 
     sauvegarder();
     afficherPresences();
@@ -329,7 +391,6 @@ function remplirFiltreDepartement() {
     if (!select) return;
 
     const valeurActuelle = select.value;
-
     const departements = [...new Set(personnels.map(p => p.departement).filter(Boolean))].sort();
 
     select.innerHTML = `<option value="">Tous les départements</option>`;
@@ -354,6 +415,8 @@ function obtenirDonneesFiltrees() {
     const dateFin = document.getElementById('dateFinFiltre')?.value || '';
 
     return presences.filter(item => {
+        const dateReference = item.dateArrivee || item.date || '';
+
         const correspondRecherche =
             !rechercheNom ||
             (item.nom || '').toLowerCase().includes(rechercheNom) ||
@@ -366,10 +429,10 @@ function obtenirDonneesFiltrees() {
             !filtreLocalisation || item.localisation === filtreLocalisation;
 
         const correspondDateDebut =
-            !dateDebut || item.date >= dateDebut;
+            !dateDebut || dateReference >= dateDebut;
 
         const correspondDateFin =
-            !dateFin || item.date <= dateFin;
+            !dateFin || dateReference <= dateFin;
 
         return correspondRecherche &&
             correspondDepartement &&
@@ -417,6 +480,8 @@ function afficherResumeFiltres(nb) {
 
 function afficherPersonnels() {
     const zone = document.getElementById('tablePersonnel');
+    if (!zone) return;
+
     const data = obtenirPersonnelsFiltres();
 
     if (data.length === 0) {
@@ -465,6 +530,7 @@ function afficherPersonnels() {
 function afficherPresences() {
     const data = obtenirDonneesFiltrees();
     const zone = document.getElementById('tableZone');
+    if (!zone) return;
 
     afficherResumeFiltres(data.length);
 
@@ -477,16 +543,17 @@ function afficherPresences() {
         <div class="table-responsive">
             <table class="table table-bordered table-striped">
                 <thead>
-                    <tr >
+                    <tr>
                         <th>Matricule</th>
                         <th>Nom</th>
                         <th>Département</th>
                         <th>Position</th>
                         <th>Frais</th>
-                        <th>Heure d'arrivée</th>
-                        <th>Heure de sortie</th>
+                        <th>Heure arrivée</th>
+                        <th>Heure sortie</th>
                         <th>Heures travaillées</th>
-                        <th>Date</th>
+                        <th>Date arrivée</th>
+                        <th>Date sortie</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -494,23 +561,32 @@ function afficherPresences() {
     `;
 
     data.forEach(item => {
+        const dateArrivee = item.dateArrivee || item.date || '';
+        const dateSortie = item.dateSortie || '';
+
         html += `
             <tr>
                 <td data-label="Matricule">${item.matricule || '-'}</td>
-                <td data-label="Nom">${item.nom}</td>
+                <td data-label="Nom">${item.nom || '-'}</td>
                 <td data-label="Département">${item.departement || '-'}</td>
                 <td data-label="Position">${item.localisation || '-'}</td>
                 <td data-label="Frais">${formatMontant(item.frais)} Ar</td>
-                <td data-label="Heure d'arrivée">${item.heureArrivee || '-'}</td>
-                <td data-label="Heure de sortie">${item.heureSortie || '-'}</td>
+                <td data-label="Heure arrivée">${item.heureArrivee || '-'}</td>
+                <td data-label="Heure sortie">${item.heureSortie || '-'}</td>
                 <td data-label="Heures travaillées">
-    ${
-        item.heureSortie 
-        ? calculerHeuresTravail(item.heureArrivee, item.heureSortie)
-        : '-'
-    }
-</td>
-                <td data-label="Date">${formatDate(item.date)}</td>
+                    ${
+                        item.heureSortie
+                            ? calculerHeuresTravail(
+                                dateArrivee,
+                                item.heureArrivee,
+                                dateSortie,
+                                item.heureSortie
+                            )
+                            : '-'
+                    }
+                </td>
+                <td data-label="Date arrivée">${formatDate(dateArrivee)}</td>
+                <td data-label="Date sortie">${formatDate(dateSortie)}</td>
                 <td data-label="Actions">
                     <div class="actions">
                         <button class="btn btn-secondary" onclick="modifierPresence(${item.id})">Modifier</button>
@@ -533,13 +609,20 @@ function afficherPresences() {
 }
 
 function mettreAJourStats() {
-    document.getElementById('total').textContent = presences.length;
+    const totalEl = document.getElementById('total');
+    const totalFraisEl = document.getElementById('totalFrais');
+    const nbJourEl = document.getElementById('nbJour');
+    const heureMoyenneEl = document.getElementById('heureMoyenne');
+
+    if (totalEl) totalEl.textContent = presences.length;
 
     const totalFrais = presences.reduce((sum, item) => sum + (Number(item.frais) || 0), 0);
-    document.getElementById('totalFrais').textContent = formatMontant(totalFrais) + ' Ar';
+    if (totalFraisEl) totalFraisEl.textContent = formatMontant(totalFrais) + ' Ar';
 
-    const joursUniques = new Set(presences.map(x => x.date).filter(Boolean));
-    document.getElementById('nbJour').textContent = joursUniques.size;
+    const joursUniques = new Set(
+        presences.map(x => x.dateArrivee || x.date).filter(Boolean)
+    );
+    if (nbJourEl) nbJourEl.textContent = joursUniques.size;
 
     const heures = presences
         .map(x => x.heureArrivee)
@@ -549,13 +632,15 @@ function mettreAJourStats() {
             return hh * 60 + mm;
         });
 
-    if (heures.length) {
-        const moyenne = Math.round(heures.reduce((a, b) => a + b, 0) / heures.length);
-        const hh = String(Math.floor(moyenne / 60)).padStart(2, '0');
-        const mm = String(moyenne % 60).padStart(2, '0');
-        document.getElementById('heureMoyenne').textContent = `${hh}:${mm}`;
-    } else {
-        document.getElementById('heureMoyenne').textContent = '--:--';
+    if (heureMoyenneEl) {
+        if (heures.length) {
+            const moyenne = Math.round(heures.reduce((a, b) => a + b, 0) / heures.length);
+            const hh = String(Math.floor(moyenne / 60)).padStart(2, '0');
+            const mm = String(moyenne % 60).padStart(2, '0');
+            heureMoyenneEl.textContent = `${hh}:${mm}`;
+        } else {
+            heureMoyenneEl.textContent = '--:--';
+        }
     }
 }
 
@@ -590,9 +675,10 @@ function exporterPDF() {
 
     const rows = data.map(item => [
         item.matricule || '-',
-        item.nom,
-        formatDate(item.date),
+        item.nom || '-',
+        formatDate(item.dateArrivee || item.date || ''),
         item.heureArrivee || '-',
+        formatDate(item.dateSortie || ''),
         item.heureSortie || '-',
         item.heuresTravail || '-',
         item.departement || '-',
@@ -603,8 +689,9 @@ function exporterPDF() {
     const head = [[
         'Matricule',
         'Nom',
-        'Date',
+        'Date arrivée',
         'Heure arrivée',
+        'Date sortie',
         'Heure sortie',
         'Heures travail',
         'Département',
@@ -655,10 +742,11 @@ function imprimerPresencesFiltrees() {
             <td>${item.departement || '-'}</td>
             <td>${item.localisation || '-'}</td>
             <td>${formatMontant(item.frais)} Ar</td>
+            <td>${formatDate(item.dateArrivee || item.date || '')}</td>
             <td>${item.heureArrivee || '-'}</td>
+            <td>${formatDate(item.dateSortie || '')}</td>
             <td>${item.heureSortie || '-'}</td>
             <td>${item.heuresTravail || '-'}</td>
-            <td>${formatDate(item.date)}</td>
         </tr>
     `).join('');
 
@@ -709,10 +797,11 @@ function imprimerPresencesFiltrees() {
                         <th>Département</th>
                         <th>Position</th>
                         <th>Frais</th>
+                        <th>Date arrivée</th>
                         <th>Heure arrivée</th>
+                        <th>Date sortie</th>
                         <th>Heure sortie</th>
                         <th>Heures travaillées</th>
-                        <th>Date</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -732,11 +821,18 @@ function imprimerPresencesFiltrees() {
 }
 
 function reinitialiserFiltres() {
-    document.getElementById('rechercheNom').value = '';
-    document.getElementById('filtreDepartement').value = '';
-    document.getElementById('filtreLocalisation').value = '';
-    document.getElementById('dateDebutFiltre').value = '';
-    document.getElementById('dateFinFiltre').value = '';
+    const rechercheNom = document.getElementById('rechercheNom');
+    const filtreDepartement = document.getElementById('filtreDepartement');
+    const filtreLocalisation = document.getElementById('filtreLocalisation');
+    const dateDebutFiltre = document.getElementById('dateDebutFiltre');
+    const dateFinFiltre = document.getElementById('dateFinFiltre');
+
+    if (rechercheNom) rechercheNom.value = '';
+    if (filtreDepartement) filtreDepartement.value = '';
+    if (filtreLocalisation) filtreLocalisation.value = '';
+    if (dateDebutFiltre) dateDebutFiltre.value = '';
+    if (dateFinFiltre) dateFinFiltre.value = '';
+
     afficherPresences();
 }
 
@@ -781,6 +877,7 @@ function importerDonneesJSON(event) {
             personnels = Array.isArray(data.personnels) ? data.personnels : [];
             presences = Array.isArray(data.presences) ? data.presences : [];
 
+            migrerAnciennesDonnees();
             sauvegarderPersonnels();
             sauvegarder();
 
@@ -832,6 +929,7 @@ function deconnexion() {
     window.location.href = "../index.html";
 }
 
+migrerAnciennesDonnees();
 chargerListePersonnel();
 remplirFiltreDepartement();
 afficherPersonnels();
