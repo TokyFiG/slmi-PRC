@@ -175,11 +175,11 @@ function ajouterPresence() {
         return;
     }
 
-    const dejaPresent = presences.some(item => item.personnelId === personnelId && item.date === date);
-    if (dejaPresent) {
-        alert('Cette personne a déjà une présence enregistrée aujourd’hui.');
-        return;
-    }
+    // const dejaPresent = presences.some(item => item.personnelId === personnelId && item.date === date);
+    // if (dejaPresent) {
+    //     alert('Cette personne a déjà une présence enregistrée aujourd’hui.');
+    //     return;
+    // }
 
     presences.push({
         id: Date.now(),
