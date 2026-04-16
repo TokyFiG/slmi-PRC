@@ -16,9 +16,6 @@ const PERSONNEL_KEY = 'gestion_personnels_data';
 let presences = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
 let personnels = JSON.parse(localStorage.getItem(PERSONNEL_KEY)) || [];
 
-document.getElementById('datePresence').value = getDateAujourdhui();
-mettreHeureActuelle();
-
 function afficherMessage(message, type = "success") {
     const box = document.getElementById("messageBox");
     if (!box) return;
@@ -118,7 +115,6 @@ function calculerHeuresTravail(dateArrivee, heureArrivee, dateSortie, heureSorti
 
     let diff = fin.getTime() - debut.getTime();
 
-    // sécurité si ancienne donnée sans dateSortie correcte
     if (diff < 0) {
         diff += 24 * 60 * 60 * 1000;
     }
@@ -235,7 +231,7 @@ function ajouterPresence() {
         nom,
         departement,
         localisation,
-        date: dateArrivee, // conservé pour compatibilité ancienne logique
+        date: dateArrivee,
         dateArrivee,
         heureArrivee,
         dateSortie: '',
@@ -246,7 +242,6 @@ function ajouterPresence() {
 
     sauvegarder();
     afficherPresences();
-    mettreAJourStats();
 
     document.getElementById('personnelSelect').value = '';
     document.getElementById('matriculeAffiche').value = '';
@@ -278,7 +273,6 @@ function ajouterSortie(id) {
 
     sauvegarder();
     afficherPresences();
-    mettreAJourStats();
     afficherMessage("Sortie enregistrée avec succès.");
 }
 
@@ -304,7 +298,6 @@ function modifierPresence(id) {
 
     sauvegarder();
     afficherPresences();
-    mettreAJourStats();
     afficherMessage("Présence modifiée avec succès.");
 }
 
@@ -382,7 +375,6 @@ function supprimerPresence(id) {
     presences = presences.filter(item => item.id !== id);
     sauvegarder();
     afficherPresences();
-    mettreAJourStats();
     afficherMessage("Présence supprimée avec succès.", "warning");
 }
 
@@ -533,6 +525,7 @@ function afficherPresences() {
     if (!zone) return;
 
     afficherResumeFiltres(data.length);
+    mettreAJourStats();
 
     if (data.length === 0) {
         zone.innerHTML = '<div class="empty">Aucune présence trouvée avec ces filtres.</div>';
@@ -614,17 +607,19 @@ function mettreAJourStats() {
     const nbJourEl = document.getElementById('nbJour');
     const heureMoyenneEl = document.getElementById('heureMoyenne');
 
-    if (totalEl) totalEl.textContent = presences.length;
+    const data = obtenirDonneesFiltrees();
 
-    const totalFrais = presences.reduce((sum, item) => sum + (Number(item.frais) || 0), 0);
+    if (totalEl) totalEl.textContent = data.length;
+
+    const totalFrais = data.reduce((sum, item) => sum + (Number(item.frais) || 0), 0);
     if (totalFraisEl) totalFraisEl.textContent = formatMontant(totalFrais) + ' Ar';
 
     const joursUniques = new Set(
-        presences.map(x => x.dateArrivee || x.date).filter(Boolean)
+        data.map(x => x.dateArrivee || x.date).filter(Boolean)
     );
     if (nbJourEl) nbJourEl.textContent = joursUniques.size;
 
-    const heures = presences
+    const heures = data
         .map(x => x.heureArrivee)
         .filter(Boolean)
         .map(h => {
@@ -712,6 +707,90 @@ function exporterPDF() {
 
     const fileName = `rapport-presence-${day}-${month}-${year}.pdf`;
     doc.save(fileName);
+}
+
+function exporterExcel() {
+    const data = obtenirDonneesFiltrees();
+
+    if (data.length === 0) {
+        alert('Aucune donnée à exporter en Excel.');
+        return;
+    }
+
+    const rechercheNom = document.getElementById('rechercheNom')?.value.trim() || '';
+    const filtreDepartement = document.getElementById('filtreDepartement')?.value || '';
+    const filtreLocalisation = document.getElementById('filtreLocalisation')?.value || '';
+    const dateDebut = document.getElementById('dateDebutFiltre')?.value || '';
+    const dateFin = document.getElementById('dateFinFiltre')?.value || '';
+
+    const donneesExcel = data.map(item => {
+        const dateArrivee = item.dateArrivee || item.date || '';
+        const dateSortie = item.dateSortie || '';
+
+        return {
+            Matricule: item.matricule || '-',
+            Nom: item.nom || '-',
+            Département: item.departement || '-',
+            Position: item.localisation || '-',
+            "Date arrivée": formatDate(dateArrivee),
+            "Heure arrivée": item.heureArrivee || '-',
+            "Date sortie": formatDate(dateSortie),
+            "Heure sortie": item.heureSortie || '-',
+            "Heures travaillées": item.heureSortie
+                ? calculerHeuresTravail(
+                    dateArrivee,
+                    item.heureArrivee,
+                    dateSortie,
+                    item.heureSortie
+                )
+                : '-',
+            "Frais (Ar)": Number(item.frais) || 0
+        };
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(donneesExcel);
+
+    ws['!cols'] = [
+        { wch: 12 },
+        { wch: 25 },
+        { wch: 18 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 18 },
+        { wch: 14 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Présences');
+
+    const totalFrais = data.reduce((sum, item) => sum + (Number(item.frais) || 0), 0);
+
+    const resume = [
+        ["Rapport de présence"],
+        ["Date d'export", new Date().toLocaleString('fr-FR')],
+        ["Recherche", rechercheNom || "Tous"],
+        ["Département", filtreDepartement || "Tous"],
+        ["Position", filtreLocalisation || "Toutes"],
+        ["Date début", dateDebut ? formatDate(dateDebut) : "---"],
+        ["Date fin", dateFin ? formatDate(dateFin) : "---"],
+        ["Nombre de présences", data.length],
+        ["Total des frais", `${formatMontant(totalFrais)} Ar`]
+    ];
+
+    const wsResume = XLSX.utils.aoa_to_sheet(resume);
+    wsResume['!cols'] = [{ wch: 20 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, wsResume, 'Résumé');
+
+    const today = new Date();
+    const day = String(today.getDate()).padStart(2, '0');
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const year = today.getFullYear();
+
+    const fileName = `rapport-presence-${day}-${month}-${year}.xlsx`;
+    XLSX.writeFile(wb, fileName);
 }
 
 function imprimerPresencesFiltrees() {
@@ -830,8 +909,8 @@ function reinitialiserFiltres() {
     if (rechercheNom) rechercheNom.value = '';
     if (filtreDepartement) filtreDepartement.value = '';
     if (filtreLocalisation) filtreLocalisation.value = '';
-    if (dateDebutFiltre) dateDebutFiltre.value = '';
-    if (dateFinFiltre) dateFinFiltre.value = '';
+    if (dateDebutFiltre) dateDebutFiltre.value = getDateAujourdhui();
+    if (dateFinFiltre) dateFinFiltre.value = getDateAujourdhui();
 
     afficherPresences();
 }
@@ -884,8 +963,6 @@ function importerDonneesJSON(event) {
             chargerListePersonnel();
             remplirFiltreDepartement();
             afficherPersonnels();
-            afficherPresences();
-            mettreAJourStats();
 
             document.getElementById('personnelSelect').value = '';
             document.getElementById('matriculeAffiche').value = '';
@@ -894,6 +971,7 @@ function importerDonneesJSON(event) {
             document.getElementById('localisation').value = '';
             document.getElementById('frais').value = '';
 
+            afficherPresences();
             afficherMessage('Données importées avec succès.');
         } catch (error) {
             alert('Fichier JSON invalide.');
@@ -911,9 +989,6 @@ function viderDonnees() {
     presences = [];
     sauvegarder();
 
-    afficherPresences();
-    mettreAJourStats();
-
     document.getElementById('personnelSelect').value = '';
     document.getElementById('matriculeAffiche').value = '';
     document.getElementById('nom').value = '';
@@ -921,6 +996,7 @@ function viderDonnees() {
     document.getElementById('localisation').value = '';
     document.getElementById('frais').value = '';
 
+    afficherPresences();
     afficherMessage("Toutes les présences ont été supprimées.", "warning");
 }
 
@@ -929,10 +1005,18 @@ function deconnexion() {
     window.location.href = "../index.html";
 }
 
+document.getElementById('datePresence').value = getDateAujourdhui();
+mettreHeureActuelle();
+
+const dateDebutFiltreInit = document.getElementById('dateDebutFiltre');
+const dateFinFiltreInit = document.getElementById('dateFinFiltre');
+
+if (dateDebutFiltreInit) dateDebutFiltreInit.value = getDateAujourdhui();
+if (dateFinFiltreInit) dateFinFiltreInit.value = getDateAujourdhui();
+
 migrerAnciennesDonnees();
 chargerListePersonnel();
 remplirFiltreDepartement();
 afficherPersonnels();
 afficherPresences();
-mettreAJourStats();
 setInterval(mettreHeureActuelle, 30000);
