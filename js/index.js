@@ -16,6 +16,47 @@ const PERSONNEL_KEY = 'gestion_personnels_data';
 let presences = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
 let personnels = JSON.parse(localStorage.getItem(PERSONNEL_KEY)) || [];
 
+/* =========================
+   PAGINATION
+========================= */
+const LIGNES_PAR_PAGE = 10;
+let pageActuelle = 1;
+
+/* =========================
+   OUTILS DATE / HEURE
+========================= */
+function getNowMadagascar() {
+    const now = new Date();
+
+    const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Indian/Antananarivo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    });
+
+    const timeFormatter = new Intl.DateTimeFormat('fr-FR', {
+        timeZone: 'Indian/Antananarivo',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+
+    return {
+        date: dateFormatter.format(now),
+        heure: timeFormatter.format(now)
+    };
+}
+
+function getDateAujourdhui() {
+    return getNowMadagascar().date;
+}
+
+function getHeureActuelle() {
+    return getNowMadagascar().heure.slice(0, 5);
+}
+
 function afficherMessage(message, type = "success") {
     const box = document.getElementById("messageBox");
     if (!box) return;
@@ -32,25 +73,20 @@ function afficherMessage(message, type = "success") {
     }, 3000);
 }
 
-function getDateAujourdhui() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
-function getHeureActuelle() {
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    return `${hh}:${mm}`;
-}
-
 function mettreHeureActuelle() {
     const champHeure = document.getElementById('heureArrivee');
     if (champHeure) {
         champHeure.value = getHeureActuelle();
+    }
+}
+
+function mettreDateAujourdhuiSiVideOuAuto() {
+    const champDate = document.getElementById('datePresence');
+    if (!champDate) return;
+
+    if (!champDate.value || champDate.dataset.auto === "true") {
+        champDate.value = getDateAujourdhui();
+        champDate.dataset.auto = "true";
     }
 }
 
@@ -224,7 +260,7 @@ function ajouterPresence() {
         return;
     }
 
-    presences.push({
+    presences.unshift({
         id: Date.now(),
         personnelId,
         matricule,
@@ -241,6 +277,7 @@ function ajouterPresence() {
     });
 
     sauvegarder();
+    pageActuelle = 1;
     afficherPresences();
 
     document.getElementById('personnelSelect').value = '';
@@ -250,6 +287,7 @@ function ajouterPresence() {
     document.getElementById('localisation').value = '';
     document.getElementById('frais').value = '';
     document.getElementById('datePresence').value = getDateAujourdhui();
+    document.getElementById('datePresence').dataset.auto = "true";
     mettreHeureActuelle();
 
     afficherMessage("Présence ajoutée avec succès.");
@@ -374,6 +412,12 @@ function supprimerPresence(id) {
 
     presences = presences.filter(item => item.id !== id);
     sauvegarder();
+
+    const totalPages = Math.max(1, Math.ceil(obtenirDonneesFiltrees().length / LIGNES_PAR_PAGE));
+    if (pageActuelle > totalPages) {
+        pageActuelle = totalPages;
+    }
+
     afficherPresences();
     afficherMessage("Présence supprimée avec succès.", "warning");
 }
@@ -519,6 +563,42 @@ function afficherPersonnels() {
     zone.innerHTML = html;
 }
 
+/* =========================
+   PAGINATION
+========================= */
+function changerPage(page) {
+    const data = obtenirDonneesFiltrees();
+    const totalPages = Math.max(1, Math.ceil(data.length / LIGNES_PAR_PAGE));
+
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+
+    pageActuelle = page;
+    afficherPresences();
+}
+
+function genererPagination(totalLignes) {
+    const totalPages = Math.max(1, Math.ceil(totalLignes / LIGNES_PAR_PAGE));
+
+    if (totalLignes === 0) return '';
+
+    return `
+        <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+            <div>
+                <small>Page ${pageActuelle} / ${totalPages}</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary btn-sm" onclick="changerPage(${pageActuelle - 1})" ${pageActuelle <= 1 ? 'disabled' : ''}>
+                    Précédent
+                </button>
+                <button class="btn btn-outline-primary btn-sm" onclick="changerPage(${pageActuelle + 1})" ${pageActuelle >= totalPages ? 'disabled' : ''}>
+                    Suivant
+                </button>
+            </div>
+        </div>
+    `;
+}
+
 function afficherPresences() {
     const data = obtenirDonneesFiltrees();
     const zone = document.getElementById('tableZone');
@@ -528,9 +608,18 @@ function afficherPresences() {
     mettreAJourStats();
 
     if (data.length === 0) {
+        pageActuelle = 1;
         zone.innerHTML = '<div class="empty">Aucune présence trouvée avec ces filtres.</div>';
         return;
     }
+
+    const totalPages = Math.max(1, Math.ceil(data.length / LIGNES_PAR_PAGE));
+    if (pageActuelle > totalPages) pageActuelle = totalPages;
+    if (pageActuelle < 1) pageActuelle = 1;
+
+    const debut = (pageActuelle - 1) * LIGNES_PAR_PAGE;
+    const fin = debut + LIGNES_PAR_PAGE;
+    const dataPage = data.slice(debut, fin);
 
     let html = `
         <div class="table-responsive">
@@ -553,7 +642,7 @@ function afficherPresences() {
                 <tbody>
     `;
 
-    data.forEach(item => {
+    dataPage.forEach(item => {
         const dateArrivee = item.dateArrivee || item.date || '';
         const dateSortie = item.dateSortie || '';
 
@@ -597,7 +686,9 @@ function afficherPresences() {
                 </tbody>
             </table>
         </div>
+        ${genererPagination(data.length)}
     `;
+
     zone.innerHTML = html;
 }
 
@@ -912,6 +1003,7 @@ function reinitialiserFiltres() {
     if (dateDebutFiltre) dateDebutFiltre.value = getDateAujourdhui();
     if (dateFinFiltre) dateFinFiltre.value = getDateAujourdhui();
 
+    pageActuelle = 1;
     afficherPresences();
 }
 
@@ -971,6 +1063,7 @@ function importerDonneesJSON(event) {
             document.getElementById('localisation').value = '';
             document.getElementById('frais').value = '';
 
+            pageActuelle = 1;
             afficherPresences();
             afficherMessage('Données importées avec succès.');
         } catch (error) {
@@ -996,6 +1089,7 @@ function viderDonnees() {
     document.getElementById('localisation').value = '';
     document.getElementById('frais').value = '';
 
+    pageActuelle = 1;
     afficherPresences();
     afficherMessage("Toutes les présences ont été supprimées.", "warning");
 }
@@ -1005,7 +1099,63 @@ function deconnexion() {
     window.location.href = "../index.html";
 }
 
+/* =========================
+   TEMPS RÉEL
+========================= */
+function rechargerDepuisLocalStorage() {
+    presences = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    personnels = JSON.parse(localStorage.getItem(PERSONNEL_KEY)) || [];
+}
+
+function rafraichirInterface() {
+    rechargerDepuisLocalStorage();
+    mettreHeureActuelle();
+    mettreDateAujourdhuiSiVideOuAuto();
+    remplirFiltreDepartement();
+    chargerListePersonnel();
+    afficherPersonnels();
+    afficherPresences();
+}
+
+/* Détecte les changements venant d’un autre onglet */
+window.addEventListener('storage', function (event) {
+    if (event.key === STORAGE_KEY || event.key === PERSONNEL_KEY) {
+        rafraichirInterface();
+    }
+});
+
+/* Si l'utilisateur change manuellement la date, on arrête l’auto */
+const champDatePresence = document.getElementById('datePresence');
+if (champDatePresence) {
+    champDatePresence.addEventListener('input', function () {
+        this.dataset.auto = "false";
+    });
+}
+
+/* Si l'utilisateur modifie les filtres, retour page 1 */
+['rechercheNom', 'filtreDepartement', 'filtreLocalisation', 'dateDebutFiltre', 'dateFinFiltre'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    const eventType = (el.tagName === 'INPUT' && el.type !== 'date') ? 'input' : 'change';
+
+    el.addEventListener(eventType, () => {
+        pageActuelle = 1;
+        afficherPresences();
+    });
+});
+
+/* Recherche personnel en direct */
+const recherchePersonnel = document.getElementById('recherchePersonnel');
+if (recherchePersonnel) {
+    recherchePersonnel.addEventListener('input', afficherPersonnels);
+}
+
+/* =========================
+   INITIALISATION
+========================= */
 document.getElementById('datePresence').value = getDateAujourdhui();
+document.getElementById('datePresence').dataset.auto = "true";
 mettreHeureActuelle();
 
 const dateDebutFiltreInit = document.getElementById('dateDebutFiltre');
@@ -1019,4 +1169,14 @@ chargerListePersonnel();
 remplirFiltreDepartement();
 afficherPersonnels();
 afficherPresences();
-setInterval(mettreHeureActuelle, 30000);
+
+/* Heure qui se met à jour */
+setInterval(() => {
+    mettreHeureActuelle();
+    mettreDateAujourdhuiSiVideOuAuto();
+}, 1000);
+
+/* Interface qui se réactualise en temps réel */
+setInterval(() => {
+    rafraichirInterface();
+}, 3000);
