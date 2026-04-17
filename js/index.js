@@ -190,9 +190,12 @@ function migrerAnciennesDonnees() {
 }
 
 function ajouterPersonnel() {
+    const nomEl = document.getElementById('nomPersonnel');
+    const departementEl = document.getElementById('departementPersonnel');
+
     const matricule = genererMatricule();
-    const nom = document.getElementById('nomPersonnel').value.trim();
-    const departement = document.getElementById('departementPersonnel').value;
+    const nom = nomEl ? nomEl.value.trim() : '';
+    const departement = departementEl ? departementEl.value : '';
 
     if (!nom || !departement) {
         alert('Merci de remplir tous les champs du personnel.');
@@ -211,61 +214,91 @@ function ajouterPersonnel() {
     chargerListePersonnel();
     remplirFiltreDepartement();
 
-    document.getElementById('nomPersonnel').value = '';
-    document.getElementById('departementPersonnel').value = '';
+    if (nomEl) nomEl.value = '';
+    if (departementEl) departementEl.value = '';
 
     afficherMessage("Personnel ajouté avec succès.");
 
     const modalElement = document.getElementById('modalPersonnel');
-    const modalInstance = bootstrap.Modal.getInstance(modalElement);
-    if (modalInstance) modalInstance.hide();
+    if (modalElement && window.bootstrap) {
+        const modalInstance = bootstrap.Modal.getInstance(modalElement);
+        if (modalInstance) modalInstance.hide();
+    }
 }
 
 function chargerListePersonnel() {
     const select = document.getElementById('personnelSelect');
     if (!select) return;
 
+    const valeurActuelle = select.value;
+
     select.innerHTML = `<option value="">-- Sélectionner un personnel --</option>`;
 
     personnels.forEach(item => {
         const option = document.createElement('option');
-        option.value = item.id;
+        option.value = String(item.id);
         option.textContent = `${item.nom} (${item.matricule})`;
         select.appendChild(option);
     });
+
+    if ([...select.options].some(opt => opt.value === valeurActuelle)) {
+        select.value = valeurActuelle;
+    }
 }
 
 function remplirInfosPersonnel() {
-    const id = Number(document.getElementById('personnelSelect').value);
-    const item = personnels.find(p => p.id === id);
+    const select = document.getElementById('personnelSelect');
+    if (!select) return;
 
-    document.getElementById('matriculeAffiche').value = item ? item.matricule : '';
-    document.getElementById('nom').value = item ? item.nom : '';
-    document.getElementById('departement').value = item ? item.departement : '';
-    document.getElementById('frais').value = '';
+    const id = Number(select.value);
+    const item = personnels.find(p => Number(p.id) === id);
+
+    const matriculeEl = document.getElementById('matriculeAffiche');
+    const nomEl = document.getElementById('nom');
+    const departementEl = document.getElementById('departement');
+    const fraisEl = document.getElementById('frais');
+
+    if (matriculeEl) matriculeEl.value = item ? item.matricule : '';
+    if (nomEl) nomEl.value = item ? item.nom : '';
+    if (departementEl) departementEl.value = item ? item.departement : '';
+    if (fraisEl) fraisEl.value = '';
 }
 
 function ajouterPresence() {
-    const personnelId = Number(document.getElementById('personnelSelect').value);
-    const matricule = document.getElementById('matriculeAffiche').value.trim();
-    const nom = document.getElementById('nom').value.trim();
-    const departement = document.getElementById('departement').value.trim();
-    const localisation = document.getElementById('localisation').value;
-    const dateArrivee = document.getElementById('datePresence').value;
-    const heureArrivee = getHeureActuelle();
-    const frais = document.getElementById('frais').value || 0;
+    const personnelSelectEl = document.getElementById('personnelSelect');
+    const localisationEl = document.getElementById('localisation');
+    const datePresenceEl = document.getElementById('datePresence');
+    const fraisEl = document.getElementById('frais');
 
-    if (!personnelId || !matricule || !nom || !departement || !localisation || !dateArrivee) {
-        alert('Merci de sélectionner un personnel et une position.');
+    const personnelId = personnelSelectEl ? Number(personnelSelectEl.value) : 0;
+    const itemPersonnel = personnels.find(p => Number(p.id) === personnelId);
+
+    const localisation = localisationEl ? localisationEl.value.trim() : '';
+    const dateArrivee = datePresenceEl ? datePresenceEl.value : '';
+    const heureArrivee = getHeureActuelle();
+    const frais = fraisEl ? fraisEl.value || 0 : 0;
+
+    if (!itemPersonnel) {
+        alert('Merci de sélectionner un personnel.');
+        return;
+    }
+
+    if (!localisation) {
+        alert('Merci de sélectionner une position.');
+        return;
+    }
+
+    if (!dateArrivee) {
+        alert('Merci de sélectionner une date.');
         return;
     }
 
     presences.unshift({
         id: Date.now(),
-        personnelId,
-        matricule,
-        nom,
-        departement,
+        personnelId: itemPersonnel.id,
+        matricule: itemPersonnel.matricule,
+        nom: itemPersonnel.nom,
+        departement: itemPersonnel.departement,
         localisation,
         date: dateArrivee,
         dateArrivee,
@@ -280,16 +313,23 @@ function ajouterPresence() {
     pageActuelle = 1;
     afficherPresences();
 
-    document.getElementById('personnelSelect').value = '';
-    document.getElementById('matriculeAffiche').value = '';
-    document.getElementById('nom').value = '';
-    document.getElementById('departement').value = '';
-    document.getElementById('localisation').value = '';
-    document.getElementById('frais').value = '';
-    document.getElementById('datePresence').value = getDateAujourdhui();
-    document.getElementById('datePresence').dataset.auto = "true";
-    mettreHeureActuelle();
+    if (personnelSelectEl) personnelSelectEl.value = '';
+    const matriculeEl = document.getElementById('matriculeAffiche');
+    const nomEl = document.getElementById('nom');
+    const departementEl = document.getElementById('departement');
 
+    if (matriculeEl) matriculeEl.value = '';
+    if (nomEl) nomEl.value = '';
+    if (departementEl) departementEl.value = '';
+    if (localisationEl) localisationEl.value = '';
+    if (fraisEl) fraisEl.value = '';
+
+    if (datePresenceEl) {
+        datePresenceEl.value = getDateAujourdhui();
+        datePresenceEl.dataset.auto = "true";
+    }
+
+    mettreHeureActuelle();
     afficherMessage("Présence ajoutée avec succès.");
 }
 
@@ -343,22 +383,32 @@ function ouvrirModalModifierPersonnel(id) {
     const item = personnels.find(p => p.id === id);
     if (!item) return;
 
-    document.getElementById('editPersonnelId').value = item.id;
-    document.getElementById('editMatriculePersonnel').value = item.matricule || '';
-    document.getElementById('editNomPersonnel').value = item.nom || '';
-    document.getElementById('editDepartementPersonnel').value = item.departement || '';
+    const editId = document.getElementById('editPersonnelId');
+    const editMatricule = document.getElementById('editMatriculePersonnel');
+    const editNom = document.getElementById('editNomPersonnel');
+    const editDepartement = document.getElementById('editDepartementPersonnel');
 
-    const modal = new bootstrap.Modal(document.getElementById('modalModifierPersonnel'));
-    modal.show();
+    if (editId) editId.value = item.id;
+    if (editMatricule) editMatricule.value = item.matricule || '';
+    if (editNom) editNom.value = item.nom || '';
+    if (editDepartement) editDepartement.value = item.departement || '';
+
+    if (window.bootstrap) {
+        const modalEl = document.getElementById('modalModifierPersonnel');
+        if (modalEl) {
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+    }
 }
 
 function validerModificationPersonnel() {
-    const id = Number(document.getElementById('editPersonnelId').value);
+    const id = Number(document.getElementById('editPersonnelId')?.value);
     const item = personnels.find(p => p.id === id);
     if (!item) return;
 
-    const nom = document.getElementById('editNomPersonnel').value.trim();
-    const departement = document.getElementById('editDepartementPersonnel').value;
+    const nom = document.getElementById('editNomPersonnel')?.value.trim() || '';
+    const departement = document.getElementById('editDepartementPersonnel')?.value || '';
 
     if (!nom || !departement) {
         alert('Merci de remplir tous les champs.');
@@ -385,8 +435,10 @@ function validerModificationPersonnel() {
     afficherMessage("Personnel modifié avec succès.");
 
     const modalElement = document.getElementById('modalModifierPersonnel');
-    const modalInstance = bootstrap.Modal.getInstance(modalElement);
-    if (modalInstance) modalInstance.hide();
+    if (modalElement && window.bootstrap) {
+        const modalInstance = bootstrap.Modal.getInstance(modalElement);
+        if (modalInstance) modalInstance.hide();
+    }
 }
 
 function supprimerPersonnel(id) {
@@ -1056,12 +1108,19 @@ function importerDonneesJSON(event) {
             remplirFiltreDepartement();
             afficherPersonnels();
 
-            document.getElementById('personnelSelect').value = '';
-            document.getElementById('matriculeAffiche').value = '';
-            document.getElementById('nom').value = '';
-            document.getElementById('departement').value = '';
-            document.getElementById('localisation').value = '';
-            document.getElementById('frais').value = '';
+            const personnelSelect = document.getElementById('personnelSelect');
+            const matricule = document.getElementById('matriculeAffiche');
+            const nom = document.getElementById('nom');
+            const departement = document.getElementById('departement');
+            const localisation = document.getElementById('localisation');
+            const frais = document.getElementById('frais');
+
+            if (personnelSelect) personnelSelect.value = '';
+            if (matricule) matricule.value = '';
+            if (nom) nom.value = '';
+            if (departement) departement.value = '';
+            if (localisation) localisation.value = '';
+            if (frais) frais.value = '';
 
             pageActuelle = 1;
             afficherPresences();
@@ -1082,12 +1141,19 @@ function viderDonnees() {
     presences = [];
     sauvegarder();
 
-    document.getElementById('personnelSelect').value = '';
-    document.getElementById('matriculeAffiche').value = '';
-    document.getElementById('nom').value = '';
-    document.getElementById('departement').value = '';
-    document.getElementById('localisation').value = '';
-    document.getElementById('frais').value = '';
+    const personnelSelect = document.getElementById('personnelSelect');
+    const matricule = document.getElementById('matriculeAffiche');
+    const nom = document.getElementById('nom');
+    const departement = document.getElementById('departement');
+    const localisation = document.getElementById('localisation');
+    const frais = document.getElementById('frais');
+
+    if (personnelSelect) personnelSelect.value = '';
+    if (matricule) matricule.value = '';
+    if (nom) nom.value = '';
+    if (departement) departement.value = '';
+    if (localisation) localisation.value = '';
+    if (frais) frais.value = '';
 
     pageActuelle = 1;
     afficherPresences();
@@ -1124,59 +1190,58 @@ window.addEventListener('storage', function (event) {
     }
 });
 
-/* Si l'utilisateur change manuellement la date, on arrête l’auto */
-const champDatePresence = document.getElementById('datePresence');
-if (champDatePresence) {
-    champDatePresence.addEventListener('input', function () {
-        this.dataset.auto = "false";
+document.addEventListener('DOMContentLoaded', () => {
+    const datePresence = document.getElementById('datePresence');
+    const dateDebutFiltreInit = document.getElementById('dateDebutFiltre');
+    const dateFinFiltreInit = document.getElementById('dateFinFiltre');
+    const personnelSelect = document.getElementById('personnelSelect');
+
+    if (datePresence) {
+        datePresence.value = getDateAujourdhui();
+        datePresence.dataset.auto = "true";
+
+        datePresence.addEventListener('input', function () {
+            this.dataset.auto = "false";
+        });
+    }
+
+    if (dateDebutFiltreInit) dateDebutFiltreInit.value = getDateAujourdhui();
+    if (dateFinFiltreInit) dateFinFiltreInit.value = getDateAujourdhui();
+
+    if (personnelSelect) {
+        personnelSelect.addEventListener('change', remplirInfosPersonnel);
+    }
+
+    ['rechercheNom', 'filtreDepartement', 'filtreLocalisation', 'dateDebutFiltre', 'dateFinFiltre'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        const eventType = (el.tagName === 'INPUT' && el.type !== 'date') ? 'input' : 'change';
+
+        el.addEventListener(eventType, () => {
+            pageActuelle = 1;
+            afficherPresences();
+        });
     });
-}
 
-/* Si l'utilisateur modifie les filtres, retour page 1 */
-['rechercheNom', 'filtreDepartement', 'filtreLocalisation', 'dateDebutFiltre', 'dateFinFiltre'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
+    const recherchePersonnel = document.getElementById('recherchePersonnel');
+    if (recherchePersonnel) {
+        recherchePersonnel.addEventListener('input', afficherPersonnels);
+    }
 
-    const eventType = (el.tagName === 'INPUT' && el.type !== 'date') ? 'input' : 'change';
-
-    el.addEventListener(eventType, () => {
-        pageActuelle = 1;
-        afficherPresences();
-    });
-});
-
-/* Recherche personnel en direct */
-const recherchePersonnel = document.getElementById('recherchePersonnel');
-if (recherchePersonnel) {
-    recherchePersonnel.addEventListener('input', afficherPersonnels);
-}
-
-/* =========================
-   INITIALISATION
-========================= */
-document.getElementById('datePresence').value = getDateAujourdhui();
-document.getElementById('datePresence').dataset.auto = "true";
-mettreHeureActuelle();
-
-const dateDebutFiltreInit = document.getElementById('dateDebutFiltre');
-const dateFinFiltreInit = document.getElementById('dateFinFiltre');
-
-if (dateDebutFiltreInit) dateDebutFiltreInit.value = getDateAujourdhui();
-if (dateFinFiltreInit) dateFinFiltreInit.value = getDateAujourdhui();
-
-migrerAnciennesDonnees();
-chargerListePersonnel();
-remplirFiltreDepartement();
-afficherPersonnels();
-afficherPresences();
-
-/* Heure qui se met à jour */
-setInterval(() => {
+    migrerAnciennesDonnees();
+    chargerListePersonnel();
+    remplirFiltreDepartement();
+    afficherPersonnels();
+    afficherPresences();
     mettreHeureActuelle();
-    mettreDateAujourdhuiSiVideOuAuto();
-}, 1000);
 
-/* Interface qui se réactualise en temps réel */
-setInterval(() => {
-    rafraichirInterface();
-}, 3000);
+    setInterval(() => {
+        mettreHeureActuelle();
+        mettreDateAujourdhuiSiVideOuAuto();
+    }, 1000);
+
+    setInterval(() => {
+        rafraichirInterface();
+    }, 3000);
+});
