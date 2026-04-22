@@ -54,6 +54,10 @@ function getDateAujourdhui() {
 }
 
 function getHeureActuelle() {
+    return getNowMadagascar().heure;
+}
+
+function getHeureActuelleHM() {
     return getNowMadagascar().heure.slice(0, 5);
 }
 
@@ -76,7 +80,7 @@ function afficherMessage(message, type = "success") {
 function mettreHeureActuelle() {
     const champHeure = document.getElementById('heureArrivee');
     if (champHeure) {
-        champHeure.value = getHeureActuelle();
+        champHeure.value = getHeureActuelleHM();
     }
 }
 
@@ -125,6 +129,13 @@ function formatMontant(valeur) {
     return Number(valeur || 0).toLocaleString('fr-FR');
 }
 
+function formatMinutesToHM(totalMinutes) {
+    totalMinutes = Number(totalMinutes || 0);
+    const heures = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(heures).padStart(2, '0')}h${String(minutes).padStart(2, '0')}`;
+}
+
 function creerDateTime(dateStr, heureStr) {
     if (!dateStr || !heureStr) return null;
 
@@ -141,13 +152,13 @@ function creerDateTime(dateStr, heureStr) {
     return new Date(year, month - 1, day, hours, minutes, 0, 0);
 }
 
-function calculerHeuresTravail(dateArrivee, heureArrivee, dateSortie, heureSortie) {
-    if (!dateArrivee || !heureArrivee || !dateSortie || !heureSortie) return '-';
+function calculerMinutesTravail(dateArrivee, heureArrivee, dateSortie, heureSortie, totalPauseMinutes = 0) {
+    if (!dateArrivee || !heureArrivee || !dateSortie || !heureSortie) return 0;
 
     const debut = creerDateTime(dateArrivee, heureArrivee);
     const fin = creerDateTime(dateSortie, heureSortie);
 
-    if (!debut || !fin) return '-';
+    if (!debut || !fin) return 0;
 
     let diff = fin.getTime() - debut.getTime();
 
@@ -156,10 +167,16 @@ function calculerHeuresTravail(dateArrivee, heureArrivee, dateSortie, heureSorti
     }
 
     const totalMinutes = Math.floor(diff / 60000);
-    const heures = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
+    const minutesTravail = totalMinutes - Number(totalPauseMinutes || 0);
 
-    return `${String(heures).padStart(2, '0')}h${String(minutes).padStart(2, '0')}`;
+    return Math.max(0, minutesTravail);
+}
+
+function calculerHeuresTravail(dateArrivee, heureArrivee, dateSortie, heureSortie, totalPauseMinutes = 0) {
+    if (!dateArrivee || !heureArrivee || !dateSortie || !heureSortie) return '-';
+    return formatMinutesToHM(
+        calculerMinutesTravail(dateArrivee, heureArrivee, dateSortie, heureSortie, totalPauseMinutes)
+    );
 }
 
 function migrerAnciennesDonnees() {
@@ -176,12 +193,37 @@ function migrerAnciennesDonnees() {
             modifie = true;
         }
 
-        item.heuresTravail = calculerHeuresTravail(
+        if (typeof item.totalPauseMinutes === 'undefined') {
+            item.totalPauseMinutes = 0;
+            modifie = true;
+        }
+
+        if (typeof item.pauseEnCours === 'undefined') {
+            item.pauseEnCours = false;
+            modifie = true;
+        }
+
+        if (typeof item.pauseDebut === 'undefined') {
+            item.pauseDebut = '';
+            modifie = true;
+        }
+
+        if (!Array.isArray(item.historiquePauses)) {
+            item.historiquePauses = [];
+            modifie = true;
+        }
+
+        item.heuresTravailMinutes = calculerMinutesTravail(
             item.dateArrivee || item.date || '',
             item.heureArrivee || '',
             item.dateSortie || '',
-            item.heureSortie || ''
+            item.heureSortie || '',
+            item.totalPauseMinutes || 0
         );
+
+        item.heuresTravail = item.heureSortie
+            ? formatMinutesToHM(item.heuresTravailMinutes || 0)
+            : '-';
 
         return item;
     });
@@ -306,6 +348,11 @@ function ajouterPresence() {
         dateSortie: '',
         heureSortie: '',
         frais: Number(frais),
+        totalPauseMinutes: 0,
+        pauseEnCours: false,
+        pauseDebut: '',
+        historiquePauses: [],
+        heuresTravailMinutes: 0,
         heuresTravail: '-'
     });
 
@@ -333,21 +380,103 @@ function ajouterPresence() {
     afficherMessage("Présence ajoutée avec succès.");
 }
 
+function demarrerPause(id) {
+    const item = presences.find(x => x.id === id);
+    if (!item) return;
+
+    if (item.heureSortie) {
+        alert("Cette présence a déjà une sortie.");
+        return;
+    }
+
+    if (item.pauseEnCours) {
+        alert("Une pause est déjà en cours.");
+        return;
+    }
+
+    item.pauseEnCours = true;
+    item.pauseDebut = `${getDateAujourdhui()} ${getHeureActuelle()}`;
+
+    sauvegarder();
+    afficherPresences();
+    afficherMessage("Pause démarrée avec succès.", "warning");
+}
+
+function terminerPause(id) {
+    const item = presences.find(x => x.id === id);
+    if (!item) return;
+
+    if (!item.pauseEnCours || !item.pauseDebut) {
+        alert("Aucune pause en cours.");
+        return;
+    }
+
+    const [dateDebutPause, heureDebutPause] = item.pauseDebut.split(' ');
+    const dateFinPause = getDateAujourdhui();
+    const heureFinPause = getHeureActuelle();
+
+    const debut = creerDateTime(dateDebutPause, heureDebutPause);
+    const fin = creerDateTime(dateFinPause, heureFinPause);
+
+    if (!debut || !fin) {
+        alert("Erreur sur le calcul de la pause.");
+        return;
+    }
+
+    let diff = fin.getTime() - debut.getTime();
+    if (diff < 0) {
+        diff += 24 * 60 * 60 * 1000;
+    }
+
+    const minutesPause = Math.floor(diff / 60000);
+
+    item.totalPauseMinutes = Number(item.totalPauseMinutes || 0) + minutesPause;
+    item.historiquePauses.push({
+        debut: item.pauseDebut,
+        fin: `${dateFinPause} ${heureFinPause}`,
+        minutes: minutesPause
+    });
+    item.pauseEnCours = false;
+    item.pauseDebut = '';
+
+    if (item.heureSortie) {
+        item.heuresTravailMinutes = calculerMinutesTravail(
+            item.dateArrivee || item.date,
+            item.heureArrivee,
+            item.dateSortie || '',
+            item.heureSortie || '',
+            item.totalPauseMinutes || 0
+        );
+        item.heuresTravail = formatMinutesToHM(item.heuresTravailMinutes || 0);
+    }
+
+    sauvegarder();
+    afficherPresences();
+    afficherMessage("Retour de pause enregistré avec succès.");
+}
+
 function ajouterSortie(id) {
     const item = presences.find(x => x.id === id);
     if (!item || item.heureSortie) return;
+
+    if (item.pauseEnCours) {
+        alert("Impossible de faire la sortie pendant une pause en cours.");
+        return;
+    }
 
     const dateSortie = getDateAujourdhui();
     const heureSortie = getHeureActuelle();
 
     item.dateSortie = dateSortie;
     item.heureSortie = heureSortie;
-    item.heuresTravail = calculerHeuresTravail(
+    item.heuresTravailMinutes = calculerMinutesTravail(
         item.dateArrivee || item.date,
         item.heureArrivee,
         item.dateSortie,
-        item.heureSortie
+        item.heureSortie,
+        item.totalPauseMinutes || 0
     );
+    item.heuresTravail = formatMinutesToHM(item.heuresTravailMinutes || 0);
 
     sauvegarder();
     afficherPresences();
@@ -367,12 +496,17 @@ function modifierPresence(id) {
     }
 
     item.frais = Number(nouveauxFrais);
-    item.heuresTravail = calculerHeuresTravail(
-        item.dateArrivee || item.date,
-        item.heureArrivee,
-        item.dateSortie || '',
-        item.heureSortie || ''
-    );
+
+    if (item.heureSortie) {
+        item.heuresTravailMinutes = calculerMinutesTravail(
+            item.dateArrivee || item.date,
+            item.heureArrivee,
+            item.dateSortie || '',
+            item.heureSortie || '',
+            item.totalPauseMinutes || 0
+        );
+        item.heuresTravail = formatMinutesToHM(item.heuresTravailMinutes || 0);
+    }
 
     sauvegarder();
     afficherPresences();
@@ -685,7 +819,8 @@ function afficherPresences() {
                         <th>Frais</th>
                         <th>Heure arrivée</th>
                         <th>Heure sortie</th>
-                        <th>Heures travaillées</th>
+                        <th>Total pause</th>
+                        <th>Total travail</th>
                         <th>Date arrivée</th>
                         <th>Date sortie</th>
                         <th>Actions</th>
@@ -707,27 +842,24 @@ function afficherPresences() {
                 <td data-label="Frais">${formatMontant(item.frais)} Ar</td>
                 <td data-label="Heure arrivée">${item.heureArrivee || '-'}</td>
                 <td data-label="Heure sortie">${item.heureSortie || '-'}</td>
-                <td data-label="Heures travaillées">
-                    ${
-                        item.heureSortie
-                            ? calculerHeuresTravail(
-                                dateArrivee,
-                                item.heureArrivee,
-                                dateSortie,
-                                item.heureSortie
-                            )
-                            : '-'
-                    }
+                <td data-label="Total pause">
+                    ${formatMinutesToHM(item.totalPauseMinutes || 0)}
+                    ${item.pauseEnCours ? `<div class="badge-pause">En pause</div>` : ''}
+                </td>
+                <td data-label="Total travail">
+                    ${item.heureSortie ? formatMinutesToHM(item.heuresTravailMinutes || 0) : '-'}
                 </td>
                 <td data-label="Date arrivée">${formatDate(dateArrivee)}</td>
                 <td data-label="Date sortie">${formatDate(dateSortie)}</td>
                 <td data-label="Actions">
                     <div class="actions">
                         <button class="btn btn-secondary" onclick="modifierPresence(${item.id})">Modifier</button>
-                        <button class="btn btn-danger" onclick="supprimerPresence(${item.id})">Supprimer</button>
-                        <button class="btn btn-primary" onclick="ajouterSortie(${item.id})" ${item.heureSortie ? 'disabled' : ''}>
+                        <button class="btn btn-secondary" onclick="demarrerPause(${item.id})" ${item.heureSortie || item.pauseEnCours ? 'disabled' : ''}>Pause</button>
+                        <button class="btn btn-primary" onclick="terminerPause(${item.id})" ${item.pauseEnCours ? '' : 'disabled'}>Retour pause</button>
+                        <button class="btn btn-primary" onclick="ajouterSortie(${item.id})" ${item.heureSortie || item.pauseEnCours ? 'disabled' : ''}>
                             ${item.heureSortie ? 'Déjà sortie' : 'Sortie'}
                         </button>
+                        <button class="btn btn-danger" onclick="supprimerPresence(${item.id})">Supprimer</button>
                     </div>
                 </td>
             </tr>
@@ -818,7 +950,8 @@ function exporterPDF() {
         item.heureArrivee || '-',
         formatDate(item.dateSortie || ''),
         item.heureSortie || '-',
-        item.heuresTravail || '-',
+        formatMinutesToHM(item.totalPauseMinutes || 0),
+        item.heureSortie ? formatMinutesToHM(item.heuresTravailMinutes || 0) : '-',
         item.departement || '-',
         item.localisation || '-',
         formatMontant(item.frais) + ' Ar'
@@ -831,7 +964,8 @@ function exporterPDF() {
         'Heure arrivée',
         'Date sortie',
         'Heure sortie',
-        'Heures travail',
+        'Pause',
+        'Travail',
         'Département',
         'Position',
         'Frais'
@@ -879,14 +1013,8 @@ function exporterExcel() {
             "Heure arrivée": item.heureArrivee || '-',
             "Date sortie": formatDate(dateSortie),
             "Heure sortie": item.heureSortie || '-',
-            "Heures travaillées": item.heureSortie
-                ? calculerHeuresTravail(
-                    dateArrivee,
-                    item.heureArrivee,
-                    dateSortie,
-                    item.heureSortie
-                )
-                : '-',
+            "Total pause": formatMinutesToHM(item.totalPauseMinutes || 0),
+            "Total travail": item.heureSortie ? formatMinutesToHM(item.heuresTravailMinutes || 0) : '-',
             "Frais (Ar)": Number(item.frais) || 0
         };
     });
@@ -903,7 +1031,7 @@ function exporterExcel() {
         { wch: 15 },
         { wch: 15 },
         { wch: 15 },
-        { wch: 18 },
+        { wch: 15 },
         { wch: 14 }
     ];
 
@@ -968,7 +1096,8 @@ function imprimerPresencesFiltrees() {
             <td>${item.heureArrivee || '-'}</td>
             <td>${formatDate(item.dateSortie || '')}</td>
             <td>${item.heureSortie || '-'}</td>
-            <td>${item.heuresTravail || '-'}</td>
+            <td>${formatMinutesToHM(item.totalPauseMinutes || 0)}</td>
+            <td>${item.heureSortie ? formatMinutesToHM(item.heuresTravailMinutes || 0) : '-'}</td>
         </tr>
     `).join('');
 
@@ -1023,7 +1152,8 @@ function imprimerPresencesFiltrees() {
                         <th>Heure arrivée</th>
                         <th>Date sortie</th>
                         <th>Heure sortie</th>
-                        <th>Heures travaillées</th>
+                        <th>Total pause</th>
+                        <th>Total travail</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1183,7 +1313,6 @@ function rafraichirInterface() {
     afficherPresences();
 }
 
-/* Détecte les changements venant d’un autre onglet */
 window.addEventListener('storage', function (event) {
     if (event.key === STORAGE_KEY || event.key === PERSONNEL_KEY) {
         rafraichirInterface();
