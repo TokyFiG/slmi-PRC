@@ -854,8 +854,8 @@ function afficherPresences() {
                 <td data-label="Actions">
                     <div class="actions">
                         <button class="btn btn-secondary" onclick="modifierPresence(${item.id})">Modifier</button>
-                        <button class="btn btn-secondary" onclick="demarrerPause(${item.id})" ${item.heureSortie || item.pauseEnCours ? 'disabled' : ''}>Pause</button>
-                        <button class="btn btn-primary" onclick="terminerPause(${item.id})" ${item.pauseEnCours ? '' : 'disabled'}>Retour pause</button>
+                        <button class="btn btn-warning" onclick="demarrerPause(${item.id})" ${item.heureSortie || item.pauseEnCours ? 'disabled' : ''}>Pause</button>
+                        <button class="btn btn-success" onclick="terminerPause(${item.id})" ${item.pauseEnCours ? '' : 'disabled'}>Retour pause</button>
                         <button class="btn btn-primary" onclick="ajouterSortie(${item.id})" ${item.heureSortie || item.pauseEnCours ? 'disabled' : ''}>
                             ${item.heureSortie ? 'Déjà sortie' : 'Sortie'}
                         </button>
