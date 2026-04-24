@@ -303,7 +303,7 @@ function remplirInfosPersonnel() {
     if (matriculeEl) matriculeEl.value = item ? item.matricule : '';
     if (nomEl) nomEl.value = item ? item.nom : '';
     if (departementEl) departementEl.value = item ? item.departement : '';
-    if (fraisEl) fraisEl.value = '';
+    if (fraisEl) fraisEl.value = '6000';
 }
 
 function ajouterPresence() {
